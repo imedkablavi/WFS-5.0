@@ -15,12 +15,12 @@ if _entry in _code:
 
 exec(compile(_code, str(_ROOT / "src" / "wfs_recover_impl.py"), "exec"), globals(), globals())
 
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 _original_build_parser = build_parser
 
 
 def _review(args):
-    from review_server_v2 import serve
+    from review_server_v3 import serve
     serve(
         args.root,
         args.bind,
@@ -28,7 +28,6 @@ def _review(args):
         args.allow_delete,
         args.token,
         Path(args.quarantine_dir) if args.quarantine_dir else None,
-        args.delete_policy,
     )
 
 
@@ -38,19 +37,13 @@ def build_parser():
     if sub is None:
         raise RuntimeError("Unable to extend WFS CLI: subparser action not found")
 
-    review = sub.add_parser("review", help="professional browser review console")
+    review = sub.add_parser("review", help="hour-safe browser review console")
     review.add_argument("--root", required=True)
     review.add_argument("--bind", default="127.0.0.1")
     review.add_argument("--port", type=int, default=8090)
     review.add_argument("--allow-delete", action="store_true")
     review.add_argument("--token")
     review.add_argument("--quarantine-dir")
-    review.add_argument(
-        "--delete-policy",
-        choices=("selection-only", "anything-except-keep", "discard-only"),
-        default="selection-only",
-        help="selection-only is safest: delete only through the reviewed Delete unselected plan",
-    )
     review.set_defaults(func=_review)
     return ap
 
