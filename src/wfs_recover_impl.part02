@@ -1,0 +1,237 @@
+        h = os.pread(fd, 16, frag * FRAG)
+        if len(h) < 16 or h[:4] != b"\x00\x00\x01\xfd":
+            continue
+        dt = decode_ts(struct.unpack_from("<I", h, 8)[0])
+        if not dt or dt.date() != date.date():
+            continue
+        groups.setdefault((dt.hour, dt.minute), {})[frag] = dt
+
+    out = []
+    for hm in sorted(groups):
+        vals = sorted(groups[hm].items())
+        out.append({
+            "label": f"{hm[0]:02d}-{hm[1]:02d}",
+            "frags": [x[0] for x in vals],
+            "dt": min(x[1] for x in vals),
+        })
+    return out
+
+
+def init_chain(fd: int, start: int) -> Chain:
+    data = os.pread(fd, FRAG, start * FRAG)
+    if len(data) != FRAG:
+        return Chain(start, start, [start], None, False, unresolved_steps=1)
+    try:
+        tail = parse_tail(data)
+    except WFSParseError:
+        # Do not pretend this is a clean exact boundary.
+        tail = b""
+        unresolved = 1
+    else:
+        unresolved = 0
+    return Chain(
+        start=start,
+        current=start,
+        chain=[start],
+        tail=tail,
+        active=(tail is not None),
+        unresolved_steps=unresolved,
+    )
+
+
+def probe_candidate(fd: int, tail: Optional[bytes], frag: int):
+    if tail is None:
+        return False, None
+
+    offset = frag * FRAG
+    probe = os.pread(fd, 512, offset)
+    if not probe:
+        return False, None
+
+    if tail == b"":
+        if not padding_here(probe, 0) and packet_info(probe, 0)[0] != "ok":
+            return False, None
+    else:
+        head = tail + probe
+        status, typ, hdr, size, total = packet_info(head, 0)
+        if status != "ok" or total is None:
+            return False, None
+
+        need = total - len(tail)
+        if need < 0 or need >= FRAG - 32:
+            return False, None
+
+        q = os.pread(fd, need + 512, offset)
+        if len(q) < need:
+            return False, None
+
+        # At the exact end of the carried record, a new WFS record or padding
+        # must start. This is our strongest structural continuation check.
+        if not padding_here(q, need) and packet_info(q, need)[0] != "ok":
+            return False, None
+
+    data = os.pread(fd, FRAG, offset)
+    if len(data) != FRAG:
+        return False, None
+
+    try:
+        new_tail = parse_tail((tail or b"") + data)
+    except WFSParseError:
+        return False, None
+    return True, new_tail
+
+
+def candidate_list(
+    fd: int,
+    state: Chain,
+    used: set[int],
+    stop: int,
+    near: int,
+    far: int,
+    top: int = 6,
+):
+    first = state.current + 1
+
+    def collect(a: int, b: int):
+        found = []
+        for frag in range(a, b):
+            if frag in used:
+                continue
+            ok, new_tail = probe_candidate(fd, state.tail, frag)
+            if ok:
+                gap = frag - state.current
+                # Lower score is better. Physical proximity is only a soft
+                # ranking feature after structural validity has been proved.
+                score = float(gap)
+                if new_tail is None:
+                    score -= 0.25
+                found.append((score, frag, new_tail))
+        found.sort(key=lambda x: (x[0], x[1]))
+        return found[:top]
+
+    near_end = min(stop, first + near)
+    found = collect(first, near_end)
+    if found:
+        return found
+
+    far_end = min(stop, first + far)
+    if far_end <= near_end:
+        return []
+    return collect(near_end, far_end)
+
+
+def build_chains(
+    fd: int,
+    starts: list[int],
+    stop: int,
+    near: int,
+    far: int,
+    max_iterations: int = 10000,
+) -> list[Chain]:
+    """
+    Multi-stream assignment. At each step candidate choices for all active
+    streams are considered together, and a physical fragment can only be
+    assigned to one stream.
+
+    This is intentionally conservative: no candidate means the chain stops
+    rather than stealing a fragment from another camera.
+    """
+    states = [init_chain(fd, x) for x in sorted(starts)]
+    used = set(starts)
+
+    for _ in range(max_iterations):
+        active = [i for i, s in enumerate(states) if s.active]
+        if not active:
+            break
+
+        options = {
+            i: candidate_list(fd, states[i], used, stop, near, far)
+            for i in active
+        }
+
+        for i in active:
+            c = len(options[i])
+            states[i].candidate_counts.append(c)
+            if c > 1:
+                states[i].ambiguous_steps += 1
+
+        choice_lists = []
+        for i in active:
+            opts = options[i]
+            # Missing assignment is allowed but heavily penalized.
+            per = [(score, frag, tail) for score, frag, tail in opts]
+            per.append((1_000_000.0, None, None))
+            choice_lists.append(per)
+
+        best = None
+        for combo in itertools.product(*choice_lists):
+            frags = [x[1] for x in combo if x[1] is not None]
+            if len(frags) != len(set(frags)):
+                continue
+
+            score = sum(x[0] for x in combo)
+            score += 10_000_000.0 * sum(x[1] is None for x in combo)
+
+            if best is None or score < best[0]:
+                best = (score, combo)
+
+        progressed = False
+        for pos, i in enumerate(active):
+            state = states[i]
+            if best is None:
+                state.active = False
+                state.unresolved_steps += 1
+                continue
+
+            score, frag, new_tail = best[1][pos]
+            if frag is None:
+                state.active = False
+                state.unresolved_steps += 1
+                continue
+
+            state.chain.append(frag)
+            state.current = frag
+            state.tail = new_tail
+            used.add(frag)
+            progressed = True
+            if new_tail is None:
+                state.active = False
+
+        if not progressed:
+            break
+
+    return states
+
+
+def extract_hevc(fd: int, chain: list[int], out: Path) -> tuple[int, int, dict[int, int]]:
+    buffer = b""
+    written = 0
+    packets = 0
+    type_counts: dict[int, int] = {}
+
+    with out.open("wb") as fo:
+        for frag in chain:
+            buffer += os.pread(fd, FRAG, frag * FRAG)
+            p = 0
+
+            while p < len(buffer):
+                if padding_here(buffer, p):
+                    p = len(buffer)
+                    break
+
+                status, typ, hdr, size, total = packet_info(buffer, p)
+                if status == "short":
+                    break
+                if status == "bad":
+                    raise WFSParseError(
+                        f"extract sync lost frag={frag} pos=0x{p:X}: "
+                        f"{buffer[p:p+32].hex(' ')}"
+                    )
+                if p + total > len(buffer):
+                    break
+
+                type_counts[typ] = type_counts.get(typ, 0) + 1
+                if typ in VIDEO_TYPES:
+                    payload = buffer[p + hdr:p + total]
+                    fo.write(payload)
+                    written += len(payload)
