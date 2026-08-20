@@ -1,0 +1,171 @@
+            camera_count = infer_camera_count(all_segments)
+        else:
+            camera_count = int(args.cameras)
+        if camera_count <= 0:
+            raise SystemExit("Unable to infer camera count. Supply --cameras N.")
+
+        print(f"Expected camera/start count per boundary: {camera_count}")
+
+        segments = all_segments
+        if requested:
+            segments = [x for x in all_segments if x["label"] in requested]
+        if not segments:
+            raise SystemExit("No matching recording starts found.")
+
+        index_by_label = {x["label"]: i for i, x in enumerate(all_segments)}
+
+        # Validate timeline and estimate only the physical spans actually selected,
+        # rather than assuming the entire source image must fit in the output.
+        validated = []
+        final_estimate = 0
+        max_segment_span = 0
+        for segment in segments:
+            idx = index_by_label[segment["label"]]
+            stop, expected = expected_for_segment(
+                all_segments, idx, total, args.last_duration
+            )
+            start_frag = min(segment["frags"])
+            span_bytes = max(0, stop - start_frag) * FRAG
+            final_estimate += int(span_bytes * 1.10)
+            max_segment_span = max(max_segment_span, span_bytes)
+
+            timeline_ok = (
+                stop > start_frag
+                and expected > 0
+                and expected <= args.max_segment_seconds
+            )
+            validated.append((segment, stop, expected, timeline_ok))
+
+        scratch_estimate = int(max_segment_span * 2.5)
+        out_free = shutil.disk_usage(out).free
+        work_free = shutil.disk_usage(work).free
+        same_fs = os.stat(out).st_dev == os.stat(work).st_dev
+
+        print(f"Selected final-output estimate: {final_estimate / 1024**3:.1f} GiB")
+        print(f"Peak scratch estimate: {scratch_estimate / 1024**3:.1f} GiB")
+        print(f"Output free: {out_free / 1024**3:.1f} GiB")
+        print(f"Work free: {work_free / 1024**3:.1f} GiB")
+
+        if not args.ignore_space:
+            if same_fs:
+                if out_free < final_estimate + scratch_estimate:
+                    raise SystemExit(
+                        "Insufficient free space for final output plus recovery scratch."
+                    )
+            else:
+                if out_free < final_estimate:
+                    raise SystemExit("Insufficient free space on output filesystem.")
+                if work_free < scratch_estimate:
+                    raise SystemExit("Insufficient free space on work filesystem.")
+
+        completed = {
+            (r.get("segment"), int(r.get("slot", 0)))
+            for r in old_rows
+            if args.resume and r.get("output") and Path(r["output"]).exists()
+        }
+
+        for segment, stop, expected, timeline_ok in validated:
+            print(f"\n[{segment['label']}] starts={segment['frags']}")
+            print(f"  stop={stop} expected={expected:.1f}s")
+
+            if not timeline_ok:
+                print("  FAIL: implausible/invalid timeline boundary")
+                rows = [x for x in rows if x.get("segment") != segment["label"]]
+                rows.append({
+                    "segment": segment["label"],
+                    "slot": 0,
+                    "status": "FAIL",
+                    "reasons": ["invalid_timeline_or_duration"],
+                    "strategy": "",
+                    "expected_duration": expected,
+                })
+                continue
+
+            if len(segment["frags"]) != camera_count:
+                print(
+                    f"  FAIL: start count is {len(segment['frags'])}, "
+                    f"expected {camera_count}"
+                )
+                rows = [x for x in rows if x.get("segment") != segment["label"]]
+                rows.append({
+                    "segment": segment["label"],
+                    "slot": 0,
+                    "status": "FAIL",
+                    "reasons": [
+                        f"start_count={len(segment['frags'])}",
+                        f"expected_start_count={camera_count}",
+                    ],
+                    "strategy": "",
+                })
+                continue
+
+            if args.resume and all(
+                (segment["label"], slot) in completed
+                for slot in range(1, camera_count + 1)
+            ):
+                print(f"  resume: all {camera_count} candidate files already exist, skipping")
+                continue
+
+            strategies = [args.strategy]
+            if args.auto_retry:
+                for strategy in ("conservative", "balanced", "wide"):
+                    if strategy not in strategies:
+                        strategies.append(strategy)
+
+            attempts_root = work / "_attempts"
+            attempts_root.mkdir(parents=True, exist_ok=True)
+            best = None
+            all_attempt_dirs = []
+
+            for strategy in strategies:
+                attempt_dir = attempts_root / f"{segment['label']}_{strategy}"
+                shutil.rmtree(attempt_dir, ignore_errors=True)
+                attempt_dir.mkdir(parents=True, exist_ok=True)
+                all_attempt_dirs.append(attempt_dir)
+
+                attempt_scratch = attempt_dir / "scratch"
+                print(f"  strategy={strategy}")
+
+                attempt_rows = recover_once(
+                    fd, raw, attempt_dir, attempt_scratch,
+                    segment, stop, expected, strategy,
+                    args.deep_verify, args.thumbs, fps_choices,
+                )
+                attempt_score = score_attempt(attempt_rows)
+
+                print(
+                    "   ",
+                    [
+                        (
+                            x.get("slot"),
+                            x.get("status"),
+                            x.get("packets"),
+                            x.get("mp4_duration"),
+                        )
+                        for x in attempt_rows
+                    ],
+                )
+
+                if best is None or attempt_score < best[0]:
+                    old_best = best
+                    best = (attempt_score, strategy, attempt_rows, attempt_dir)
+                    if old_best and not args.keep_attempts:
+                        shutil.rmtree(old_best[3], ignore_errors=True)
+                elif not args.keep_attempts:
+                    shutil.rmtree(attempt_dir, ignore_errors=True)
+
+                if (
+                    attempt_rows
+                    and len(attempt_rows) == camera_count
+                    and all(x.get("status") == "PASS" for x in attempt_rows)
+                ):
+                    break
+
+            if best is None:
+                print("  FAIL: no recovery attempt produced results")
+                continue
+
+            best_score, best_strategy, best_rows, best_dir = best
+            print(f"  selected={best_strategy} score={best_score:.1f}")
+
+            final_video = out / "video"
