@@ -3,26 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WFS Review</title>
+<title>WFS Review Console</title>
 <style>
-:root{color-scheme:dark;--bg:#0a0e14;--p:#121925;--l:#2a3547;--m:#93a4b8;--t:#eef4ff;--g:#4ad69a;--w:#ffd166;--r:#ff667a;--b:#72aeff}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif}
+:root{color-scheme:dark;--bg:#0a0e14;--p:#121925;--p2:#0e1621;--l:#2a3547;--m:#93a4b8;--t:#eef4ff;--g:#4ad69a;--w:#ffd166;--r:#ff667a;--b:#72aeff}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif}
 button,select,input{background:#172232;color:var(--t);border:1px solid var(--l);border-radius:8px;padding:8px}
-button{cursor:pointer}.good{background:#123326}.bad{background:#39171e}.muted{color:var(--m)}
-header{position:sticky;top:0;z-index:9;background:#0a0e14ee;border-bottom:1px solid var(--l);padding:12px 18px}
-main{padding:15px;max-width:1700px;margin:auto}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+button{cursor:pointer}button:hover{border-color:var(--b)}button:disabled{opacity:.45;cursor:not-allowed}
+.good{background:#123326}.bad{background:#39171e}.warn{background:#3c3112}.muted{color:var(--m)}
+header{position:sticky;top:0;z-index:9;background:#0a0e14f2;border-bottom:1px solid var(--l);padding:12px 18px}
+main{padding:15px;max-width:1800px;margin:auto}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:8px}
 .card,.player,.table{background:var(--p);border:1px solid var(--l);border-radius:12px}.card{padding:10px}.big{font-size:19px;font-weight:750}
-.player{display:none;grid-template-columns:1.5fr .5fr;gap:12px;padding:12px;margin:10px 0}.player.open{display:grid}
-video{width:100%;max-height:60vh;background:#000}.bar,.actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}
-.speed.active{border-color:var(--b)}.toolbar{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.toolbar input{min-width:240px;flex:1}
-.table{overflow:auto;max-height:67vh}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid var(--l);vertical-align:top;text-align:left}
-th{position:sticky;top:0;background:#151e2b}.pass{color:var(--g)}.review{color:var(--w)}.fail{color:var(--r)}
-.hour td{background:#0e1621;font-weight:700;border-top:2px solid var(--l)}.keeper{background:#10251d}.keepbox{transform:scale(1.25)}
-.modal{display:none;position:fixed;inset:0;background:#000b;z-index:20;align-items:center;justify-content:center}.modal.open{display:flex}
-.box{width:min(760px,95vw);max-height:90vh;overflow:auto;background:#151e2b;border:1px solid var(--l);border-radius:12px;padding:15px}
-.list{max-height:320px;overflow:auto;white-space:pre-wrap;background:#0d131c;padding:8px;border-radius:8px}.danger-note{color:var(--w);margin:8px 0}
-.toast{display:none;position:fixed;right:15px;bottom:15px;background:#172232;border:1px solid var(--l);padding:10px;border-radius:8px}
-@media(max-width:900px){.player.open{grid-template-columns:1fr}table,tbody,tr,td{display:block}thead{display:none}td{border:0}.hour td{display:block}}
+.player{display:none;grid-template-columns:minmax(0,1.7fr) minmax(260px,.55fr);gap:12px;padding:12px;margin:10px 0}
+.player.open{display:grid}.videoarea{min-width:0}.videoFrame{background:#000;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:260px}
+video{display:block;width:100%;max-height:62vh;background:#000}
+.controls{background:#0d141f;border:1px solid var(--l);border-radius:10px;padding:8px;margin-top:8px}
+.row,.actions,.toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.row{margin:5px 0}.toolbar{margin:10px 0}.toolbar input[type=search]{min-width:240px;flex:1}
+.seek{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center}.seek input[type=range]{width:100%;padding:0}
+.speed.active{border-color:var(--b);box-shadow:0 0 0 1px var(--b) inset}.status{min-height:20px}
+.table{overflow:auto;max-height:66vh}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid var(--l);vertical-align:top;text-align:left}
+th{position:sticky;top:0;background:#151e2b;z-index:2}.pass{color:var(--g)}.review{color:var(--w)}.fail{color:var(--r)}
+.hour td{background:var(--p2);font-weight:700;border-top:2px solid var(--l)}.keeper{background:#10251d}.keepbox{transform:scale(1.3)}
+.modal{display:none;position:fixed;inset:0;background:#000c;z-index:30;align-items:center;justify-content:center}.modal.open{display:flex}
+.box{width:min(820px,96vw);max-height:92vh;overflow:auto;background:#151e2b;border:1px solid var(--l);border-radius:12px;padding:15px}
+.list{max-height:350px;overflow:auto;white-space:pre-wrap;background:#0d131c;padding:8px;border-radius:8px}.danger-note{color:var(--w);margin:8px 0}
+.toast{display:none;position:fixed;right:15px;bottom:15px;background:#172232;border:1px solid var(--l);padding:10px;border-radius:8px;z-index:50}
+.player:fullscreen,.player:-webkit-full-screen{display:grid!important;width:100vw;height:100vh;margin:0;border:0;border-radius:0;padding:12px;background:#080c12;grid-template-columns:minmax(0,1fr) 330px;overflow:auto}
+.player:fullscreen .videoFrame,.player:-webkit-full-screen .videoFrame{height:calc(100vh - 150px);min-height:0}
+.player:fullscreen video,.player:-webkit-full-screen video{max-height:calc(100vh - 150px);height:100%;object-fit:contain}
+@media(max-width:900px){.player.open,.player:fullscreen,.player:-webkit-full-screen{grid-template-columns:1fr}.player:fullscreen .videoFrame,.player:-webkit-full-screen .videoFrame{height:auto}.table table,.table tbody,.table tr,.table td{display:block}.table thead{display:none}.table td{border:0}.hour td{display:block}}
 </style>
 </head>
 <body>
@@ -30,29 +39,42 @@ th{position:sticky;top:0;background:#151e2b}.pass{color:var(--g)}.review{color:v
 <main>
 <div id="stats" class="stats"></div>
 
-<div id="pp" class="player">
-  <div>
-    <video id="v" controls preload="metadata"></video>
-    <div class="bar">
-      <button id="back">↶ 5s</button><button id="ppb">Play/Pause</button><button id="fwd">5s ↷</button>
-      <span>Speed</span>
-      <button class="speed active" data-r="1">1×</button>
-      <button class="speed" data-r="2">2×</button>
-      <button class="speed" data-r="5">5×</button>
-      <span id="clock" class="muted"></span>
+<section id="pp" class="player">
+  <div class="videoarea">
+    <div class="videoFrame"><video id="v" preload="metadata" playsinline></video></div>
+    <div class="controls">
+      <div class="seek">
+        <span id="curtime">0:00</span>
+        <input id="seekbar" type="range" min="0" max="1000" value="0" step="1" aria-label="Video position">
+        <span id="duration">0:00</span>
+      </div>
+      <div class="row">
+        <button id="back">↶ 5s</button>
+        <button id="ppb">▶ Play</button>
+        <button id="fwd">5s ↷</button>
+        <span class="muted">Speed</span>
+        <button class="speed" data-r="0.5">0.5×</button>
+        <button class="speed active" data-r="1">1×</button>
+        <button class="speed" data-r="2">2×</button>
+        <button class="speed" data-r="5">5×</button>
+        <button id="fullscreen">⛶ Full screen</button>
+        <button id="reloadPos">↻ Reload position</button>
+      </div>
+      <div id="playStatus" class="status muted">Ready</div>
+      <div class="muted">Keyboard: Space play/pause • ←/→ ±5 sec • 1/2/5 speed • F full screen</div>
     </div>
-    <div class="muted">Keyboard: Space • ←/→ = ±5 sec • 1/2/5 = speed</div>
   </div>
-  <div>
+  <aside>
     <h3 id="title"></h3>
     <div id="meta" class="muted"></div>
     <div class="actions">
       <label><input id="playerKeep" class="keepbox" type="checkbox"> KEEP this video</label>
-      <button id="review">REVIEW</button><button id="discard">DISCARD</button><button id="close">Close</button>
+      <button id="review">REVIEW</button>
+      <button id="close">Close</button>
     </div>
     <pre id="info"></pre>
-  </div>
-</div>
+  </aside>
+</section>
 
 <div class="toolbar">
   <input id="q" type="search" placeholder="Search filename / hour / QC">
@@ -62,7 +84,7 @@ th{position:sticky;top:0;background:#151e2b}.pass{color:var(--g)}.review{color:v
   <button id="cleanup" class="bad">Delete unselected</button>
   <button id="sync">Sync storage</button>
 </div>
-<div class="muted">✓ Checkbox means KEEP. Unchecked recovered videos are cleanup candidates only after a deletion preview.</div>
+<div class="muted">✓ Checkbox means KEEP. Unchecked videos are only deleted after the server shows a cleanup plan. Hours with no KEEP are protected by default.</div>
 
 <div class="table">
 <table>
@@ -91,171 +113,122 @@ th{position:sticky;top:0;background:#151e2b}.pass{color:var(--g)}.review{color:v
 </div>
 
 <script>
-let D={items:[]},cur=null,PLAN=null;const $=x=>document.getElementById(x);
+let D={items:[]},cur=null,PLAN=null;
+let seekTimer=null,seekRetry=0,lastSeekTarget=null,lastWasPlaying=false;
+const $=x=>document.getElementById(x);
+const v=$('v');
 
 function bytes(n){n=Number(n||0);for(const u of ['B','KiB','MiB','GiB','TiB']){if(n<1024||u==='TiB')return n.toFixed(n<10&&u!=='B'?2:1)+' '+u;n/=1024}}
-function tm(s){s=Math.max(0,Number(s||0));return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
-function toast(s){$('toast').textContent=s;$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',2200)}
+function tm(s){if(!Number.isFinite(Number(s)))return '--:--';s=Math.max(0,Number(s));let h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=Math.floor(s%60);return (h?h+':':'')+String(m).padStart(h?2:1,'0')+':'+String(x).padStart(2,'0')}
+function toast(s){$('toast').textContent=s;$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',2400)}
 async function api(p,o={}){o.headers=Object.assign({'Content-Type':'application/json'},o.headers||{});const r=await fetch(p,o),j=await r.json().catch(()=>({error:r.statusText}));if(!r.ok&&r.status!==207)throw Error(j.error||r.statusText);return j}
-function media(p){return '/media/'+p.split('/').map(encodeURIComponent).join('/')}
-function filt(){let q=$('q').value.toLowerCase(),qc=$('qc').value,d=$('dec').value;return D.items.filter(x=>(!qc||x.status===qc)&&(!d||x.decision===d)&&(!q||JSON.stringify(x).toLowerCase().includes(q))).sort((a,b)=>(a.segment||'').localeCompare(b.segment||'')||Number(a.slot||999)-Number(b.slot||999)||a.name.localeCompare(b.name))}
+function media(p,bust=false){let u='/media/'+p.split('/').map(encodeURIComponent).join('/');return bust?u+'?retry='+Date.now():u}
 function live(){return D.items.filter(x=>x.exists)}
 function keepers(){return live().filter(x=>x.decision==='keep')}
+function filt(){let q=$('q').value.toLowerCase(),qc=$('qc').value,d=$('dec').value;return D.items.filter(x=>(!qc||x.status===qc)&&(!d||x.decision===d)&&(!q||JSON.stringify(x).toLowerCase().includes(q))).sort((a,b)=>(a.segment||'').localeCompare(b.segment||'')||Number(a.slot||999)-Number(b.slot||999)||a.name.localeCompare(b.name))}
 
 function stats(){
   let disk=D.disk||{},ls=live(),ks=keepers(),uc=ls.filter(x=>x.decision!=='keep');
-  $('ver').textContent='v'+D.version;$('root').textContent=D.root+' • '+D.video_root;
+  $('ver').textContent='v'+(D.version||'');$('root').textContent=(D.root||'')+' • '+(D.video_root||'');
   $('cleanup').disabled=!D.delete_enabled;
-  let cards=[
-    ['Files',ls.length],['Video',bytes(D.video_bytes)],['Free',bytes(disk.free)],
-    ['KEEP selected',ks.length],['KEEP size',bytes(D.keep_bytes)],
-    ['Unselected',uc.length],['Unselected size',bytes(D.unselected_bytes)],['Deleted',D.counts?.deleted||0]
-  ];
+  const cards=[['Files',ls.length],['Video',bytes(D.video_bytes)],['Free',bytes(disk.free)],['KEEP selected',ks.length],['KEEP size',bytes(D.keep_bytes)],['Unselected',uc.length],['Unselected size',bytes(D.unselected_bytes)],['Deleted',D.counts?.deleted||0]];
   $('stats').innerHTML='';
-  for(let [k,v] of cards){let c=document.createElement('div');c.className='card';c.innerHTML='<div class="big"></div><div class="muted"></div>';c.children[0].textContent=v;c.children[1].textContent=k;$('stats').append(c)}
+  for(const [k,val] of cards){let c=document.createElement('div');c.className='card';let b=document.createElement('div');b.className='big';b.textContent=val;let m=document.createElement('div');m.className='muted';m.textContent=k;c.append(b,m);$('stats').append(c)}
 }
-
-function groupLabel(items,seg){
-  let k=items.filter(x=>x.exists&&x.decision==='keep').length;
-  let n=items.filter(x=>x.exists).length;
-  return `${seg||'UNASSIGNED'} • ${k} KEEP of ${n}`;
-}
-
+function groupLabel(items,seg){let k=items.filter(x=>x.exists&&x.decision==='keep').length,n=items.filter(x=>x.exists).length;return `${seg||'UNASSIGNED'} • ${k} KEEP of ${n}`}
 function render(){
-  stats();
-  let a=filt(),tb=$('rows');tb.innerHTML='';
-  let last=null;
-  for(let x of a){
-    let seg=x.segment||'UNASSIGNED';
-    if(seg!==last){
-      let hr=document.createElement('tr');hr.className='hour';
-      let td=document.createElement('td');td.colSpan=5;td.textContent=groupLabel(D.items.filter(y=>(y.segment||'UNASSIGNED')===seg),seg);
-      hr.append(td);tb.append(hr);last=seg;
-    }
-    let tr=document.createElement('tr');
-    if(x.decision==='keep')tr.className='keeper';
-
-    let c=document.createElement('td'),cb=document.createElement('input');
-    cb.type='checkbox';cb.className='keepbox';cb.disabled=!x.exists;cb.checked=x.decision==='keep';
-    cb.title='Checked = keep this recovered video';
-    cb.onchange=async()=>{cb.disabled=true;try{await setKeep(x,cb.checked)}catch(e){cb.checked=!cb.checked;alert(e.message)}finally{cb.disabled=false}};
-    c.append(cb);tr.append(c);
-
-    let n=document.createElement('td');n.innerHTML='<b></b><div class="muted"></div>';
-    n.children[0].textContent=x.name;n.children[1].textContent=`${x.segment||'--'} • candidate ${x.slot||'?'} • ${bytes(x.size)}`;
-    if(x.exists){let b=document.createElement('button');b.textContent='▶ Open';b.onclick=()=>openVideo(x);n.append(b)}
-    tr.append(n);
-
-    let q=document.createElement('td');q.innerHTML='<b></b><div></div>';q.children[0].textContent=x.status;q.children[0].className=(x.status||'').toLowerCase();q.children[1].textContent=x.decision;tr.append(q);
-
+  stats();let a=filt(),tb=$('rows');tb.innerHTML='';let last=null;
+  for(const x of a){
+    const seg=x.segment||'UNASSIGNED';
+    if(seg!==last){let hr=document.createElement('tr');hr.className='hour';let td=document.createElement('td');td.colSpan=5;td.textContent=groupLabel(D.items.filter(y=>(y.segment||'UNASSIGNED')===seg),seg);hr.append(td);tb.append(hr);last=seg}
+    let tr=document.createElement('tr');if(x.decision==='keep')tr.className='keeper';
+    let c=document.createElement('td'),cb=document.createElement('input');cb.type='checkbox';cb.className='keepbox';cb.disabled=!x.exists;cb.checked=x.decision==='keep';cb.title='Checked = KEEP this recovered video';
+    cb.onchange=async()=>{cb.disabled=true;try{await setKeep(x,cb.checked)}catch(e){cb.checked=!cb.checked;alert(e.message)}finally{cb.disabled=false}};c.append(cb);tr.append(c);
+    let n=document.createElement('td'),name=document.createElement('b'),sub=document.createElement('div');name.textContent=x.name;sub.className='muted';sub.textContent=`${x.segment||'--'} • candidate ${x.slot||'?'} • ${bytes(x.size)}`;n.append(name,sub);
+    if(x.exists){let b=document.createElement('button');b.textContent='▶ Open';b.onclick=()=>openVideo(x);n.append(b)}tr.append(n);
+    let q=document.createElement('td'),qs=document.createElement('b'),state=document.createElement('div');qs.textContent=x.status;qs.className=(x.status||'').toLowerCase();state.textContent=x.decision;q.append(qs,state);tr.append(q);
     let t=document.createElement('td');t.textContent=`FPS ${x.fps||'?'} | ${x.duration?Number(x.duration).toFixed(1)+'s':'?'} | packets ${x.packets||'?'} | coverage ${x.coverage!==''?(Number(x.coverage)*100).toFixed(2)+'%':'?'}`;tr.append(t);
-
-    let actions=document.createElement('td');
-    if(x.exists){
-      let b=document.createElement('button');b.textContent=x.decision==='keep'?'Unselect KEEP':'Select KEEP';b.className=x.decision==='keep'?'':'good';b.onclick=()=>setKeep(x,x.decision!=='keep');actions.append(b);
-      let r=document.createElement('button');r.textContent='REVIEW';r.onclick=()=>mark(x,'review');actions.append(r);
-    }
-    tr.append(actions);tb.append(tr);
+    let actions=document.createElement('td');if(x.exists){let k=document.createElement('button');k.textContent=x.decision==='keep'?'Unselect KEEP':'Select KEEP';k.className=x.decision==='keep'?'':'good';k.onclick=()=>setKeep(x,x.decision!=='keep');let r=document.createElement('button');r.textContent='REVIEW';r.onclick=()=>mark(x,'review');actions.append(k,r)}tr.append(actions);tb.append(tr);
   }
 }
-
-async function refresh(){
-  D=await api('/api/items');
-  if(cur)cur=D.items.find(x=>x.path===cur.path&&x.exists)||null;
-  render();
-  if(cur)side();else $('pp').classList.remove('open');
-}
-
-async function setKeep(x,keep){
-  await api('/api/keep',{method:'POST',body:JSON.stringify({path:x.path,keep})});
-  await refresh();
-}
-
-function openVideo(x){
-  cur=x;let v=$('v');v.pause();v.src=media(x.path);v.playbackRate=1;rates(1);v.load();$('pp').classList.add('open');side();scrollTo({top:0,behavior:'smooth'})
-}
-
-function side(){
-  if(!cur)return;
-  $('title').textContent=cur.name;
-  $('meta').textContent=`${cur.segment||'--'} • candidate ${cur.slot||'?'} • ${bytes(cur.size)} • ${cur.status} • ${cur.decision}`;
-  $('info').textContent=`Reasons: ${(cur.reasons||[]).join('; ')||'none'}\nNote: ${cur.note||'none'}\nSHA256: ${cur.sha256||'not recorded'}`;
-  $('playerKeep').checked=cur.decision==='keep';
-}
-
-function seek(n){let v=$('v');v.currentTime=Math.max(0,Math.min(Number.isFinite(v.duration)?v.duration:1e12,v.currentTime+n))}
-function rates(r){for(let b of document.querySelectorAll('.speed'))b.classList.toggle('active',Number(b.dataset.r)===Number(r))}
-function rate(r){$('v').playbackRate=Number(r);rates(r);toast(r+'×')}
+async function refresh(){D=await api('/api/items');if(cur)cur=D.items.find(x=>x.path===cur.path&&x.exists)||null;render();if(cur)side();else $('pp').classList.remove('open')}
+async function setKeep(x,keep){await api('/api/keep',{method:'POST',body:JSON.stringify({path:x.path,keep})});await refresh()}
 async function mark(x,d){await api('/api/decision',{method:'POST',body:JSON.stringify({path:x.path,decision:d})});await refresh()}
 
-function closePlayerIfDeleting(paths){
-  if(!cur||!paths.includes(cur.path))return Promise.resolve();
-  let v=$('v');v.pause();v.removeAttribute('src');v.load();cur=null;$('pp').classList.remove('open');
-  return new Promise(r=>setTimeout(r,120));
+function setStatus(text,bad=false){$('playStatus').textContent=text;$('playStatus').style.color=bad?'var(--r)':''}
+function rates(r){for(const b of document.querySelectorAll('.speed'))b.classList.toggle('active',Number(b.dataset.r)===Number(r))}
+function rate(r){r=Number(r);try{v.playbackRate=r}catch(e){setStatus('Playback speed is not supported by this browser.',true);return}rates(v.playbackRate);setStatus(`Speed ${v.playbackRate}×`)}
+function updateTime(){
+  $('curtime').textContent=tm(v.currentTime);$('duration').textContent=tm(v.duration);
+  if(Number.isFinite(v.duration)&&v.duration>0&&!$('seekbar').matches(':active'))$('seekbar').value=String(Math.round(v.currentTime/v.duration*1000));
 }
-
-async function loadPlan(includeEmpty=false){
-  let r=await api('/api/delete-unselected-plan',{method:'POST',body:JSON.stringify({include_empty_segments:includeEmpty})});
-  PLAN=r.plan;showPlan();return PLAN;
+function bufferedText(){
+  try{if(!v.buffered.length)return 'not buffered';let end=0;for(let i=0;i<v.buffered.length;i++)if(v.currentTime>=v.buffered.start(i)-.2&&v.currentTime<=v.buffered.end(i)+.2){end=v.buffered.end(i);break}return end?`buffered to ${tm(end)}`:`${v.buffered.length} buffered range(s)`}catch(e){return 'buffer status unavailable'}
 }
+function clearSeekWatch(){if(seekTimer){clearTimeout(seekTimer);seekTimer=null}}
+function armSeekWatch(target){
+  clearSeekWatch();lastSeekTarget=target;
+  seekTimer=setTimeout(async()=>{if(!cur)return;if(seekRetry>=1){setStatus('Seek is still stuck. This recovered MP4 may have a damaged timestamp/index near this position.',true);return}seekRetry++;await reloadAt(target,true)},6000);
+}
+function seekTo(target){
+  if(!cur||!Number.isFinite(v.duration)||v.duration<=0)return;
+  target=Math.max(0,Math.min(v.duration-.01,Number(target)||0));seekRetry=0;lastWasPlaying=!v.paused;setStatus(`Seeking to ${tm(target)}…`);v.currentTime=target;armSeekWatch(target)
+}
+function seekDelta(delta){seekTo((v.currentTime||0)+delta)}
+async function reloadAt(target,automatic=false){
+  if(!cur)return;clearSeekWatch();const shouldPlay=lastWasPlaying;setStatus(automatic?'Seek stalled — retrying media connection…':'Reloading current position…');
+  v.pause();v.removeAttribute('src');v.load();await new Promise(r=>setTimeout(r,80));v.src=media(cur.path,true);v.load();
+  const onMeta=()=>{v.removeEventListener('loadedmetadata',onMeta);if(Number.isFinite(v.duration)&&v.duration>0){const t=Math.max(0,Math.min(v.duration-.01,Number(target)||0));v.currentTime=t;armSeekWatch(t);if(shouldPlay)v.play().catch(()=>{})}};
+  v.addEventListener('loadedmetadata',onMeta);
+}
+function openVideo(x){
+  clearSeekWatch();seekRetry=0;cur=x;v.pause();v.removeAttribute('src');v.load();v.src=media(x.path);v.playbackRate=1;rates(1);v.load();$('pp').classList.add('open');side();setStatus('Loading metadata…');scrollTo({top:0,behavior:'smooth'})
+}
+function side(){if(!cur)return;$('title').textContent=cur.name;$('meta').textContent=`${cur.segment||'--'} • candidate ${cur.slot||'?'} • ${bytes(cur.size)} • ${cur.status} • ${cur.decision}`;$('info').textContent=`Reasons: ${(cur.reasons||[]).join('; ')||'none'}\nNote: ${cur.note||'none'}\nSHA256: ${cur.sha256||'not recorded'}`;$('playerKeep').checked=cur.decision==='keep'}
+function closePlayer(){clearSeekWatch();v.pause();v.removeAttribute('src');v.load();cur=null;$('pp').classList.remove('open');if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})}
+async function fullscreenPlayer(){const p=$('pp');try{if(document.fullscreenElement)await document.exitFullscreen();else if(p.requestFullscreen)await p.requestFullscreen();else if(p.webkitRequestFullscreen)p.webkitRequestFullscreen()}catch(e){setStatus('Full-screen mode was blocked by the browser.',true)}}
 
+v.addEventListener('loadedmetadata',()=>{updateTime();setStatus(`Ready • duration ${tm(v.duration)} • ${bufferedText()}`)});
+v.addEventListener('durationchange',updateTime);
+v.addEventListener('timeupdate',updateTime);
+v.addEventListener('progress',()=>{if(!v.seeking&&cur)setStatus(`${v.paused?'Paused':'Playing'} • ${bufferedText()}`)});
+v.addEventListener('play',()=>{$('ppb').textContent='⏸ Pause';setStatus(`Playing • ${bufferedText()}`)});
+v.addEventListener('pause',()=>{$('ppb').textContent='▶ Play';if(cur&&!v.ended)setStatus(`Paused • ${bufferedText()}`)});
+v.addEventListener('seeking',()=>setStatus(`Seeking to ${tm(v.currentTime)}…`));
+v.addEventListener('seeked',()=>{clearSeekWatch();seekRetry=0;updateTime();setStatus(`Position ${tm(v.currentTime)} • ${bufferedText()}`)});
+v.addEventListener('waiting',()=>setStatus(`Buffering at ${tm(v.currentTime)}…`));
+v.addEventListener('stalled',()=>setStatus(`Network/media stalled at ${tm(v.currentTime)}…`,true));
+v.addEventListener('error',()=>{clearSeekWatch();let code=v.error?.code||'?';setStatus(`Playback error ${code}. The recovered file may need remux/repair for browser review.`,true)});
+
+$('seekbar').addEventListener('input',()=>{if(Number.isFinite(v.duration)&&v.duration>0)$('curtime').textContent=tm(v.duration*Number($('seekbar').value)/1000)});
+$('seekbar').addEventListener('change',()=>{if(Number.isFinite(v.duration)&&v.duration>0)seekTo(v.duration*Number($('seekbar').value)/1000)});
+$('back').onclick=()=>seekDelta(-5);$('fwd').onclick=()=>seekDelta(5);$('ppb').onclick=()=>{v.paused?v.play().catch(()=>{}):v.pause()};
+for(const b of document.querySelectorAll('.speed'))b.onclick=()=>rate(b.dataset.r);
+$('fullscreen').onclick=fullscreenPlayer;$('reloadPos').onclick=()=>reloadAt(v.currentTime||lastSeekTarget||0,false);
+$('playerKeep').onchange=()=>cur&&setKeep(cur,$('playerKeep').checked);$('review').onclick=()=>cur&&mark(cur,'review');$('close').onclick=closePlayer;
+
+async function loadPlan(includeEmpty=false){let r=await api('/api/delete-unselected-plan',{method:'POST',body:JSON.stringify({include_empty_segments:includeEmpty})});PLAN=r.plan;showPlan();return PLAN}
 function showPlan(){
-  if(!PLAN)return;
-  $('mtext').textContent=`KEEP ${PLAN.keep_count} video(s) (${bytes(PLAN.keep_bytes)}). Delete ${PLAN.count} unselected video(s), about ${bytes(PLAN.bytes)}.`;
+  if(!PLAN)return;$('mtext').textContent=`KEEP ${PLAN.keep_count} video(s) (${bytes(PLAN.keep_bytes)}). Delete ${PLAN.count} unselected video(s), about ${bytes(PLAN.bytes)}.`;
   $('blocked').textContent=PLAN.protected_segments.length?`Protected: ${PLAN.protected_segments.length} hour(s) have no KEEP selection: ${PLAN.protected_segments.join(', ')}`:'';
-  $('emptyLabel').style.display=PLAN.protected_segments.length?'block':'none';
-  let lines=[];
-  for(let s of PLAN.segments){
-    if(s.delete)lines.push(`${s.segment}: KEEP ${s.keep} • DELETE ${s.delete} • ${bytes(s.bytes)}${s.reason==='complete_segment_delete'?' • WHOLE HOUR':''}`);
-    else if(s.protected)lines.push(`${s.segment}: BLOCKED • no KEEP selected • ${s.protected} file(s)`);
-  }
-  if(PLAN.unassigned.length)lines.push(`UNASSIGNED: ${PLAN.unassigned.length} file(s) protected`);
-  $('mlist').textContent=lines.join('\n');
-  $('sure').checked=false;$('go').disabled=true;
+  $('emptyLabel').style.display=PLAN.protected_segments.length?'block':'none';let lines=[];
+  for(const s of PLAN.segments){if(s.delete)lines.push(`${s.segment}: KEEP ${s.keep} • DELETE ${s.delete} • ${bytes(s.bytes)}${s.reason==='complete_segment_delete'?' • WHOLE HOUR':''}`);else if(s.protected)lines.push(`${s.segment}: BLOCKED • no KEEP selected • ${s.protected} file(s)`)}
+  if(PLAN.unassigned.length)lines.push(`UNASSIGNED: ${PLAN.unassigned.length} file(s) protected`);$('mlist').textContent=lines.join('\n');$('sure').checked=false;$('go').disabled=true
 }
-
-async function askCleanup(){
-  if(!D.delete_enabled)return;
-  $('includeEmpty').checked=false;
-  await loadPlan(false);
-  if(!PLAN.count&&!PLAN.protected_segments.length){toast('Nothing to delete');return}
-  $('modal').classList.add('open');
-}
-
+async function askCleanup(){if(!D.delete_enabled)return;$('includeEmpty').checked=false;await loadPlan(false);if(!PLAN.count&&!PLAN.protected_segments.length){toast('Nothing to delete');return}$('modal').classList.add('open')}
 async function executeCleanup(){
-  if(!PLAN)return;
-  let targets=PLAN.accepted.map(x=>x.path);
-  await closePlayerIfDeleting(targets);
-  let r=await api('/api/delete-unselected',{method:'POST',body:JSON.stringify({plan_id:PLAN.plan_id,include_empty_segments:PLAN.include_empty_segments})});
-  closeModal();
-  if(r.errors?.length)alert(`Deleted ${r.deleted}; failed ${r.failed}\n`+r.errors.map(e=>e.path+': '+e.error).join('\n'));
-  else toast(`Deleted ${r.deleted} • ${bytes(r.bytes_removed)}`);
-  await refresh();
+  if(!PLAN)return;const targets=PLAN.accepted.map(x=>x.path);
+  if(cur&&targets.includes(cur.path)){v.pause();v.removeAttribute('src');v.load();cur=null;$('pp').classList.remove('open');await new Promise(r=>setTimeout(r,120))}
+  const r=await api('/api/delete-unselected',{method:'POST',body:JSON.stringify({plan_id:PLAN.plan_id,include_empty_segments:PLAN.include_empty_segments})});
+  closeModal();if(r.errors?.length)alert(`Deleted ${r.deleted}; failed ${r.failed}\n`+r.errors.map(e=>e.path+': '+e.error).join('\n'));else toast(`Deleted ${r.deleted} • freed ${bytes(r.bytes_removed)}`);await refresh()
 }
-
-function closeModal(){$('modal').classList.remove('open');PLAN=null;$('includeEmpty').checked=false;$('sure').checked=false;$('go').disabled=true}
-
-$('refresh').onclick=refresh;$('q').oninput=render;$('qc').onchange=render;$('dec').onchange=render;
-$('cleanup').onclick=askCleanup;$('sync').onclick=async()=>{await api('/api/sync',{method:'POST',body:'{}'});toast('Storage synced')};
-
-$('includeEmpty').onchange=async e=>{try{await loadPlan(e.target.checked)}catch(err){e.target.checked=!e.target.checked;alert(err.message)}};
+function closeModal(){$('modal').classList.remove('open');PLAN=null}
+$('includeEmpty').onchange=async()=>{await loadPlan($('includeEmpty').checked)};
 $('sure').onchange=e=>$('go').disabled=!e.target.checked;$('go').onclick=executeCleanup;$('cancel').onclick=closeModal;
-
-$('back').onclick=()=>seek(-5);$('fwd').onclick=()=>seek(5);$('ppb').onclick=()=>{let v=$('v');v.paused?v.play():v.pause()};
-for(let b of document.querySelectorAll('.speed'))b.onclick=()=>rate(b.dataset.r);
-$('v').ontimeupdate=()=>{$('clock').textContent=tm($('v').currentTime)+' / '+tm($('v').duration)};
-
-$('playerKeep').onchange=async e=>{if(!cur)return;let x=cur;try{await setKeep(x,e.target.checked)}catch(err){e.target.checked=!e.target.checked;alert(err.message)}};
-$('review').onclick=()=>cur&&mark(cur,'review');$('discard').onclick=()=>cur&&mark(cur,'discard');
-$('close').onclick=()=>{let v=$('v');v.pause();v.removeAttribute('src');v.load();cur=null;$('pp').classList.remove('open')};
-
-document.onkeydown=e=>{
-  if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)||!cur)return;
-  if(e.code==='Space'){e.preventDefault();let v=$('v');v.paused?v.play():v.pause()}
-  else if(e.key==='ArrowLeft'){e.preventDefault();seek(-5)}
-  else if(e.key==='ArrowRight'){e.preventDefault();seek(5)}
-  else if(['1','2','5'].includes(e.key))rate(e.key)
-};
+$('cleanup').onclick=askCleanup;$('refresh').onclick=refresh;$('sync').onclick=async()=>{await api('/api/sync',{method:'POST',body:'{}'});toast('Storage synced')};
+$('q').oninput=render;$('qc').onchange=render;$('dec').onchange=render;
+document.addEventListener('keydown',e=>{if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)||!cur)return;if(e.code==='Space'){e.preventDefault();v.paused?v.play().catch(()=>{}):v.pause()}else if(e.key==='ArrowLeft'){e.preventDefault();seekDelta(-5)}else if(e.key==='ArrowRight'){e.preventDefault();seekDelta(5)}else if(['1','2','5'].includes(e.key))rate(e.key);else if(e.key.toLowerCase()==='f')fullscreenPlayer()});
+document.addEventListener('fullscreenchange',()=>{$('fullscreen').textContent=document.fullscreenElement?'⛶ Exit full screen':'⛶ Full screen'});
 
 refresh().catch(e=>document.body.textContent='Error: '+e.message);
 </script>
