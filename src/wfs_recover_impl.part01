@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""
+WFS 0.5 DVR/NVR recovery toolkit for forensic and data-recovery workflows.
+
+IMPORTANT
+---------
+This tool is intentionally conservative. It never writes to the source RAW/device,
+does not mount/repair WFS, and does not claim physical camera identity unless the
+operator explicitly supplies anchors.
+
+The default recovery profile currently understands the following observed WFS 0.5 framing:
+  * 2 MiB WFS data fragments
+  * proprietary record sync 00 00 01
+  * record types FD/FE/FC carrying HEVC payloads
+  * FA/F9 non-video wrappers
+  * WFS-style timestamp in FD/FE records
+
+This is NOT a generic WFS 0.5 implementation for every DVR vendor.
+
+Typical workflow:
+  python3 wfs_recover.py scan ...
+  python3 wfs_recover.py recover --segments 09-00,10-00,11-00,13-00,14-00,22-00,23-00 ...
+  python3 wfs_recover.py recover --resume ...
+  python3 wfs_recover.py report ...
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import html
+import itertools
+import json
+import math
+import os
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional, Iterable
+
+VERSION = "0.6.0"
+FRAG = 2 * 1024 * 1024
+MAX_PACKET = 4 * 1024 * 1024
+SYNC = b"\x00\x00\x01"
+VIDEO_TYPES = {0xFC, 0xFD, 0xFE}
+KNOWN_TYPES = VIDEO_TYPES | {0xFA, 0xF9}
+FPS_CHOICES = (15.0, 25.0)
+FAT32_LIMIT = 4 * 1024**3 - 1
+
+# Conservative default QC thresholds. They are heuristics, not universal WFS constants.
+PASS_COVERAGE = 0.995
+REVIEW_COVERAGE = 0.970
+PASS_RATE_ERR = 0.005
+FAIL_RATE_ERR = 0.020
+PASS_DUR_ERR = 0.005
+FAIL_DUR_ERR = 0.020
+PASS_AMBIGUOUS = 0
+SCENE_JUMP_REVIEW = 28
+SCENE_MARGIN_STRONG = 6
+
+
+class WFSParseError(Exception):
+    pass
+
+
+@dataclass
+class Chain:
+    start: int
+    current: int
+    chain: list[int] = field(default_factory=list)
+    tail: Optional[bytes] = b""
+    active: bool = True
+    ambiguous_steps: int = 0
+    unresolved_steps: int = 0
+    candidate_counts: list[int] = field(default_factory=list)
+
+
+@dataclass
+class StreamQC:
+    segment: str
+    slot: int
+    status: str
+    reasons: list[str]
+    start_fragment: int
+    fragments: int
+    coverage: float
+    ambiguous_steps: int
+    unresolved_steps: int
+    packets: int
+    fps_assumed: float
+    packet_rate: float
+    rate_error: float
+    expected_duration: float
+    mp4_duration: float
+    duration_error: float
+    hevc_bytes: int
+    decode_error_lines: int
+    decode_warning_lines: int
+    deep_verified: bool
+    scene_jumps: int
+    scene_hashes: list[str]
+    output: str
+    sha256: str
+    strategy: str
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+
+def decode_ts(v: int) -> Optional[datetime]:
+    try:
+        return datetime(
+            2000 + ((v >> 26) & 0x3F),
+            (v >> 22) & 0x0F,
+            (v >> 17) & 0x1F,
+            (v >> 12) & 0x1F,
+            (v >> 6) & 0x3F,
+            v & 0x3F,
+        )
+    except ValueError:
+        return None
+
+
+def packet_info(b: bytes, p: int = 0):
+    remain = len(b) - p
+    if remain < 4:
+        return "short", None, None, None, None
+    if b[p:p + 3] != SYNC:
+        return "bad", None, None, None, None
+
+    typ = b[p + 3]
+    if typ in (0xFD, 0xFE):
+        hdr = 16
+        if remain < hdr:
+            return "short", typ, hdr, None, None
+        size = struct.unpack_from("<I", b, p + 12)[0]
+    elif typ == 0xFC:
+        hdr = 8
+        if remain < hdr:
+            return "short", typ, hdr, None, None
+        size = struct.unpack_from("<I", b, p + 4)[0]
+    elif typ in (0xFA, 0xF9):
+        hdr = 8
+        if remain < hdr:
+            return "short", typ, hdr, None, None
+        size = struct.unpack_from("<H", b, p + 6)[0]
+    else:
+        return "bad", typ, None, None, None
+
+    if not 0 < size <= MAX_PACKET:
+        return "bad", typ, hdr, size, None
+
+    return "ok", typ, hdr, size, hdr + size
+
+
+def padding_here(b: bytes, p: int, run: int = 64) -> bool:
+    """
+    Padding is only tested at a record boundary.
+    A four-byte run is deliberately NOT enough evidence.
+    """
+    remain = len(b) - p
+    if remain <= 0:
+        return True
+    n = min(run, remain)
+    if n < 16:
+        return all(x in (0x00, 0xFF) for x in b[p:])
+    return all(x in (0x00, 0xFF) for x in b[p:p + n])
+
+
+def parse_tail(b: bytes) -> Optional[bytes]:
+    """
+    Returns:
+      None  -> terminal padding reached
+      b""   -> exact record boundary at end of fragment
+      bytes -> incomplete record requiring continuation
+    """
+    p = 0
+    while p < len(b):
+        if padding_here(b, p):
+            return None
+
+        status, typ, hdr, size, total = packet_info(b, p)
+        if status == "short":
+            return b[p:]
+        if status == "bad":
+            raise WFSParseError(
+                f"sync lost at 0x{p:X}: {b[p:p+32].hex(' ')}"
+            )
+        if p + total > len(b):
+            return b[p:]
+        p += total
+    return b""
+
+
+def source_guard(raw: Path, allow_device: bool = False) -> dict:
+    """
+    Verify source is suitable for read-only analysis.
+    For a block device we insist it is read-only unless --allow-device is given.
+    """
+    info = {"source": str(raw), "kind": "file"}
+    if not raw.exists():
+        raise SystemExit(f"Source does not exist: {raw}")
+
+    st = raw.stat()
+    info["size"] = st.st_size
+
+    if raw.is_block_device():
+        info["kind"] = "block-device"
+        # stat().st_size is commonly zero for Linux block devices.
+        try:
+            p = subprocess.run(
+                ["blockdev", "--getsize64", str(raw)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+            )
+            if p.returncode == 0:
+                info["size"] = int(p.stdout.decode().strip())
+        except Exception:
+            pass
+        if not info["size"]:
+            raise SystemExit(f"Unable to determine block-device size: {raw}")
+        dev = raw.name
+        ro_path = Path("/sys/class/block") / dev / "ro"
+        ro = None
+        if ro_path.exists():
+            try:
+                ro = ro_path.read_text().strip()
+            except Exception:
+                pass
+        info["sysfs_ro"] = ro
+        if ro != "1" and not allow_device:
+            raise SystemExit(
+                f"REFUSING: {raw} is not confirmed read-only. "
+                "Use a forensic image/RAW or make the device read-only first."
+            )
+    return info
+
+
+def sha256_file(path: Path, block: int = 8 * 1024 * 1024) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(block), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def scan_starts(fd: int, total: int, date: datetime) -> list[dict]:
+    groups: dict[tuple[int, int], dict[int, datetime]] = {}
+    for frag in range(total):
