@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WFS Review Console</title>
+<style>
+:root{color-scheme:dark;--bg:#0a0e14;--panel:#121925;--panel2:#0e1621;--line:#2a3547;--muted:#94a5bb;--text:#eef4ff;--good:#4ad69a;--warn:#ffd166;--bad:#ff667a;--blue:#72aeff}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,sans-serif}button,select,input{background:#172232;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px}button{cursor:pointer}button:hover{border-color:var(--blue)}button:disabled{opacity:.45;cursor:not-allowed}.good{background:#123326}.bad{background:#39171e}.warn{background:#3c3112}.muted{color:var(--muted)}
+header{position:sticky;top:0;z-index:20;background:#0a0e14f5;border-bottom:1px solid var(--line);padding:10px 16px}.headerRow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}.brand{font-size:17px;font-weight:750}.root{font-size:12px;max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+main{padding:12px;max-width:1900px;margin:auto}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:7px}.card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:9px}.big{font-size:18px;font-weight:750}
+.workspace{display:grid;grid-template-columns:minmax(520px,1fr) minmax(380px,520px);gap:10px;margin-top:10px;align-items:start}.browser,.previewPane{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}.previewPane{position:sticky;top:68px;max-height:calc(100vh - 82px);overflow:auto}.paneTitle{padding:10px 12px;border-bottom:1px solid var(--line);background:#101824;font-weight:700}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px;border-bottom:1px solid var(--line);background:#0f1722}.toolbar input[type=search]{flex:1;min-width:180px}.toolbar select{max-width:190px}.hourStrip{display:flex;gap:5px;overflow:auto;padding:8px;border-bottom:1px solid var(--line);scrollbar-width:thin}.hourBtn{white-space:nowrap}.hourBtn.active{border-color:var(--blue);background:#17304d}.hourBtn.issue{box-shadow:0 0 0 1px var(--warn) inset}.hourBtn.done{box-shadow:0 0 0 1px var(--good) inset}.tableWrap{overflow:auto;max-height:calc(100vh - 310px)}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{position:sticky;top:0;z-index:3;background:#151e2b}.keeper{background:#10251d}.selectedRow{outline:1px solid var(--blue);outline-offset:-1px}.keepbox{transform:scale(1.25)}.statusPASS{color:var(--good)}.statusREVIEW{color:var(--warn)}.statusFAIL{color:var(--bad)}.chip{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 6px;margin:1px;font-size:11px}.issueText{color:var(--warn);font-size:12px}.small{font-size:12px}.actions{display:flex;gap:5px;flex-wrap:wrap}
+.videoFrame{background:#000;min-height:260px;display:flex;align-items:center;justify-content:center}video{display:block;width:100%;max-height:46vh;background:#000}.controls{padding:9px;border-top:1px solid var(--line);background:#0d141f}.seek{display:grid;grid-template-columns:auto 1fr auto;gap:7px;align-items:center}.seek input{width:100%;padding:0}.controlRow{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:7px}.speed.active{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue) inset}.previewInfo{padding:10px}.previewInfo h3{margin:0 0 5px;font-size:15px}.pre{white-space:pre-wrap;background:#0c121b;border-radius:8px;padding:8px;font-size:12px;max-height:180px;overflow:auto}.placeholder{padding:22px;color:var(--muted);text-align:center}.probePASS{color:var(--good)}.probeREVIEW{color:var(--warn)}.probeFAIL{color:var(--bad)}
+.footerBar{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 10px;border-top:1px solid var(--line);background:#0f1722}.modal{display:none;position:fixed;inset:0;background:#000c;z-index:40;align-items:center;justify-content:center}.modal.open{display:flex}.box{width:min(850px,96vw);max-height:92vh;overflow:auto;background:#151e2b;border:1px solid var(--line);border-radius:12px;padding:15px}.list{max-height:400px;overflow:auto;white-space:pre-wrap;background:#0d131c;padding:8px;border-radius:8px}.toast{display:none;position:fixed;right:15px;bottom:15px;background:#172232;border:1px solid var(--line);padding:10px;border-radius:8px;z-index:60}
+.previewPane:fullscreen,.previewPane:-webkit-full-screen{position:static;width:100vw;height:100vh;max-height:none;border:0;border-radius:0;background:#080c12;display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:auto}.previewPane:fullscreen .videoFrame,.previewPane:-webkit-full-screen .videoFrame{height:calc(100vh - 190px);min-height:0}.previewPane:fullscreen video,.previewPane:-webkit-full-screen video{height:100%;max-height:calc(100vh - 190px);object-fit:contain}
+@media(max-width:1100px){.workspace{grid-template-columns:1fr}.previewPane{position:static;max-height:none}.tableWrap{max-height:none}.root{max-width:90vw}}@media(max-width:700px){table,tbody,tr,td{display:block}thead{display:none}td{border:0;padding:5px 9px}tr{border-bottom:1px solid var(--line)}.workspace{display:block}.previewPane{margin-top:10px}}
+</style>
+</head>
+<body>
+<header><div class="headerRow"><div><div class="brand">WFS Review Console <span id="ver" class="muted"></span></div><div id="root" class="root muted"></div></div><div id="headerStatus" class="muted"></div></div></header>
+<main>
+<div id="stats" class="stats"></div>
+<div class="workspace">
+  <section class="browser">
+    <div class="paneTitle">Recovered videos by hour</div>
+    <div class="toolbar">
+      <select id="hour"><option value="">All hours</option></select>
+      <select id="camera"><option value="">All cameras</option></select>
+      <select id="qc"><option value="">All QC</option><option>PASS</option><option>REVIEW</option><option>FAIL</option><option>UNTRACKED</option></select>
+      <select id="state"><option value="">All states</option><option value="keep">KEEP</option><option value="unreviewed">Not selected</option><option value="review">REVIEW marked</option><option value="deleted">Deleted</option></select>
+      <input id="search" type="search" placeholder="Search file / camera / reason">
+      <button id="refresh">Refresh</button>
+    </div>
+    <div id="hourStrip" class="hourStrip"></div>
+    <div class="toolbar">
+      <button id="probeHour">Quick check visible hour</button>
+      <button id="cleanupHour" class="bad">Delete unselected in this hour</button>
+      <button id="cleanupAll" class="bad">Delete unselected in reviewed hours</button>
+      <button id="sync">Sync storage</button>
+    </div>
+    <div id="hourSummary" class="small muted" style="padding:0 10px 8px"></div>
+    <div class="tableWrap">
+      <table><thead><tr><th>KEEP</th><th>Video</th><th>QC / Health</th><th>Media</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table>
+    </div>
+    <div class="footerBar"><span id="visibleCount" class="muted"></span><span class="muted">Preview stays on the right; opening a video does not move the page.</span></div>
+  </section>
+
+  <aside id="previewPane" class="previewPane">
+    <div class="paneTitle">Preview / verification</div>
+    <div id="emptyPreview" class="placeholder">Choose any video. Preview will stay here while you continue down the list.</div>
+    <div id="previewContent" style="display:none">
+      <div class="videoFrame"><video id="v" preload="metadata" playsinline></video></div>
+      <div class="controls">
+        <div class="seek"><span id="curtime">0:00</span><input id="seekbar" type="range" min="0" max="1000" value="0"><span id="duration">0:00</span></div>
+        <div class="controlRow"><button id="back">↶ 5s</button><button id="play">▶ Play</button><button id="fwd">5s ↷</button><span class="muted">Speed</span><button class="speed" data-r="0.5">0.5×</button><button class="speed active" data-r="1">1×</button><button class="speed" data-r="2">2×</button><button class="speed" data-r="5">5×</button><button id="fullscreen">⛶ Full</button><button id="reloadPos">↻ Reload</button></div>
+        <div id="playStatus" class="small muted" style="margin-top:6px">Ready</div>
+      </div>
+      <div class="previewInfo">
+        <h3 id="title"></h3><div id="meta" class="muted small"></div>
+        <div class="actions" style="margin:8px 0"><label><input id="previewKeep" class="keepbox" type="checkbox"> KEEP</label><button id="markReview">Mark REVIEW</button><button id="quickProbe">Quick probe</button><button id="deepProbe">Deep 3-point check</button></div>
+        <div id="probeResult" class="small"></div>
+        <div id="detail" class="pre"></div>
+      </div>
+    </div>
+  </aside>
+</div>
+</main>
+<div id="toast" class="toast"></div>
+<div id="modal" class="modal"><div class="box"><h3>Deletion preview</h3><div id="mtext"></div><div id="blocked" class="issueText"></div><pre id="mlist" class="list"></pre><label><input id="sure" type="checkbox"> I checked this plan and want to delete these recovered copies.</label><div class="actions" style="margin-top:10px"><button id="cancel">Cancel</button><button id="go" class="bad" disabled>Delete</button></div></div></div>
+<script>
+let D={items:[],hours:[]},cur=null,PLAN=null,planHour=null,seekTimer=null,lastSeek=0,lastWasPlaying=false;
+const $=id=>document.getElementById(id),v=$('v');
+function bytes(n){n=Number(n||0);for(const u of ['B','KiB','MiB','GiB','TiB']){if(n<1024||u==='TiB')return n.toFixed(n<10&&u!=='B'?2:1)+' '+u;n/=1024}}
+function tm(s){if(!Number.isFinite(Number(s)))return '--:--';s=Math.max(0,Number(s));let h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=Math.floor(s%60);return (h?h+':':'')+String(m).padStart(h?2:1,'0')+':'+String(x).padStart(2,'0')}
+function toast(s){$('toast').textContent=s;$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',2400)}
+async function api(path,opt={}){opt.headers=Object.assign({'Content-Type':'application/json'},opt.headers||{});const r=await fetch(path,opt),j=await r.json().catch(()=>({error:r.statusText}));if(!r.ok&&r.status!==207)throw Error(j.error||r.statusText);return j}
+function media(path,bust=false){let u='/media/'+path.split('/').map(encodeURIComponent).join('/');return bust?u+'?r='+Date.now():u}
+function hourInfo(h){return D.hours.find(x=>x.hour===h)}
+function live(){return D.items.filter(x=>x.exists)}
+function populateFilters(){
+ const currentH=$('hour').value,currentC=$('camera').value;let hours=[...new Set(D.items.filter(x=>x.exists&&x.hour).map(x=>x.hour))].sort();$('hour').innerHTML='<option value="">All hours</option>';for(const h of hours){let o=document.createElement('option');o.value=h;o.textContent=h==='UNASSIGNED'?'Unassigned':h.replace('-',':');$('hour').append(o)}if(hours.includes(currentH))$('hour').value=currentH;
+ let cams=[...new Set(D.items.filter(x=>x.exists).map(x=>x.camera).filter(Boolean))].sort();$('camera').innerHTML='<option value="">All cameras</option>';for(const c of cams){let o=document.createElement('option');o.value=c;o.textContent=c;$('camera').append(o)}if(cams.includes(currentC))$('camera').value=currentC;
+ $('hourStrip').innerHTML='';for(const h of D.hours){if(h.hour==='UNASSIGNED')continue;let b=document.createElement('button');b.className='hourBtn';if(h.issues?.length)b.classList.add('issue');if(h.keep_count>0)b.classList.add('done');if($('hour').value===h.hour)b.classList.add('active');b.textContent=`${h.hour.replace('-',':')} ${h.keep_count}/${h.live_count}`;b.title=(h.issues||[]).join('; ')||'No structural warning';b.onclick=()=>{$('hour').value=h.hour;render();populateFilters()};$('hourStrip').append(b)}
+}
+function stats(){let ls=live(),ks=ls.filter(x=>x.decision==='keep'),bad=D.hours.filter(h=>h.issues?.length).length;const cards=[['Files',ls.length],['Video',bytes(D.video_bytes)],['Free',bytes(D.disk?.free)],['Expected/hour',D.expected_per_hour||'?'],['KEEP',ks.length],['KEEP size',bytes(D.keep_bytes)],['Hour warnings',bad],['Deleted',D.counts?.deleted||0]];$('stats').innerHTML='';for(const [k,val] of cards){let c=document.createElement('div');c.className='card';let b=document.createElement('div');b.className='big';b.textContent=val;let m=document.createElement('div');m.className='muted';m.textContent=k;c.append(b,m);$('stats').append(c)}$('headerStatus').textContent=D.delete_enabled?'DELETE ENABLED • selection-only cleanup':'Read-only review'}
+function filtered(){let h=$('hour').value,c=$('camera').value,qc=$('qc').value,s=$('state').value,q=$('search').value.toLowerCase();return D.items.filter(x=>(!h||x.hour===h)&&(!c||x.camera===c)&&(!qc||x.status===qc)&&(!s||x.decision===s)&&(!q||JSON.stringify([x.name,x.camera,x.reasons,x.health_reasons,x.note]).toLowerCase().includes(q))).sort((a,b)=>(a.hour||'ZZ').localeCompare(b.hour||'ZZ')||Number(a.camera_sort||999)-Number(b.camera_sort||999)||a.name.localeCompare(b.name))}
+function render(){stats();let a=filtered(),tb=$('rows');tb.innerHTML='';for(const x of a){let tr=document.createElement('tr');if(x.decision==='keep')tr.classList.add('keeper');if(cur&&cur.path===x.path)tr.classList.add('selectedRow');
+ let c=document.createElement('td'),cb=document.createElement('input');cb.type='checkbox';cb.className='keepbox';cb.disabled=!x.exists;cb.checked=x.decision==='keep';cb.onchange=async()=>{cb.disabled=true;try{await setKeep(x,cb.checked)}catch(e){alert(e.message)}finally{cb.disabled=false}};c.append(cb);tr.append(c);
+ let n=document.createElement('td');let b=document.createElement('b');b.textContent=x.name;let sub=document.createElement('div');sub.className='muted small';sub.textContent=`${x.hour||'UNASSIGNED'} • ${x.camera} • ${bytes(x.size)}`;n.append(b,sub);if(x.hour_conflict){let w=document.createElement('div');w.className='issueText';w.textContent=`Hour conflict: filename ${x.hour_file}, metadata ${x.hour_meta}`;n.append(w)}tr.append(n);
+ let q=document.createElement('td');let qs=document.createElement('div');qs.textContent=x.status;qs.className='status'+x.status;let hs=document.createElement('div');hs.textContent=x.health;hs.className='status'+x.health;let rr=document.createElement('div');rr.className='small muted';rr.textContent=(x.health_reasons||[]).join('; ');q.append(qs,hs,rr);tr.append(q);
+ let m=document.createElement('td');let p=x.probe;if(p){let ps=document.createElement('span');ps.className='chip probe'+p.status;ps.textContent='probe '+p.status;m.append(ps);let pd=document.createElement('div');pd.className='small muted';pd.textContent=`${p.codec||'?'} ${p.width||'?'}x${p.height||'?'} • ${p.duration?Number(p.duration).toFixed(1)+'s':'?'}`;m.append(pd)}else{let z=document.createElement('span');z.className='muted small';z.textContent='not probed';m.append(z)}tr.append(m);
+ let ac=document.createElement('td');ac.className='actions';if(x.exists){let o=document.createElement('button');o.textContent='▶ Preview';o.onclick=()=>openVideo(x);let k=document.createElement('button');k.textContent=x.decision==='keep'?'Unkeep':'KEEP';k.className=x.decision==='keep'?'':'good';k.onclick=()=>setKeep(x,x.decision!=='keep');ac.append(o,k)}tr.append(ac);tb.append(tr)}$('visibleCount').textContent=`${a.filter(x=>x.exists).length} visible video(s)`;updateHourSummary();}
+function updateHourSummary(){let h=$('hour').value;if(!h){$('hourSummary').textContent='Choose an hour to review its cameras together. Yellow hour buttons have structural warnings.';return}let x=hourInfo(h);if(!x){$('hourSummary').textContent='';return}let issues=(x.issues||[]).join(' • ')||'No structural warning';$('hourSummary').textContent=`${h.replace('-',':')} • live ${x.live_count} • KEEP ${x.keep_count} • expected ${x.expected||'?'} • ${issues}`}
+async function refresh(){D=await api('/api/items');if(cur)cur=D.items.find(x=>x.path===cur.path&&x.exists)||null;populateFilters();render();if(cur)showCurrent();else hidePreview()}
+async function setKeep(x,keep){await api('/api/keep',{method:'POST',body:JSON.stringify({path:x.path,keep})});await refresh()}
+async function markReview(){if(!cur)return;await api('/api/decision',{method:'POST',body:JSON.stringify({path:cur.path,decision:'review'})});await refresh()}
+function hidePreview(){$('emptyPreview').style.display='block';$('previewContent').style.display='none'}
+function openVideo(x){cur=x;v.pause();v.removeAttribute('src');v.load();v.src=media(x.path);v.playbackRate=1;rates(1);v.load();$('emptyPreview').style.display='none';$('previewContent').style.display='block';setPlayStatus('Loading metadata…');showCurrent();render()}
+function showCurrent(){if(!cur)return;$('title').textContent=cur.name;$('meta').textContent=`${cur.hour||'UNASSIGNED'} • ${cur.camera} • ${bytes(cur.size)} • QC ${cur.status} • ${cur.decision}`;$('previewKeep').checked=cur.decision==='keep';let p=cur.probe;$('probeResult').innerHTML=p?`<span class="probe${p.status}">Media probe: ${p.status}</span> • ${p.codec||'?'} • ${p.duration?Number(p.duration).toFixed(1)+'s':'duration ?'}`:'Media probe: not run';$('detail').textContent=`Health: ${cur.health}\nHealth reasons: ${(cur.health_reasons||[]).join('; ')||'none'}\nQC reasons: ${(cur.reasons||[]).join('; ')||'none'}\nHour source: ${cur.hour_source}\nManifest match: ${cur.manifest_matched?'yes':'no'}\nSHA256: ${cur.sha256||'not recorded'}`}
+function setPlayStatus(t,bad=false){$('playStatus').textContent=t;$('playStatus').style.color=bad?'var(--bad)':''}
+function rates(r){for(const b of document.querySelectorAll('.speed'))b.classList.toggle('active',Number(b.dataset.r)===Number(r))}
+function rate(r){try{v.playbackRate=Number(r);rates(v.playbackRate);setPlayStatus(`Speed ${v.playbackRate}×`)}catch(e){setPlayStatus('Speed not supported by browser',true)}}
+function updateTime(){$('curtime').textContent=tm(v.currentTime);$('duration').textContent=tm(v.duration);if(Number.isFinite(v.duration)&&v.duration>0)$('seekbar').value=String(Math.round(v.currentTime/v.duration*1000))}
+function armSeek(target){if(seekTimer)clearTimeout(seekTimer);lastSeek=target;seekTimer=setTimeout(()=>reloadAt(target,true),6000)}
+function seekTo(t){if(!Number.isFinite(v.duration)||v.duration<=0)return;t=Math.max(0,Math.min(v.duration-.01,Number(t)||0));lastWasPlaying=!v.paused;setPlayStatus(`Seeking to ${tm(t)}…`);v.currentTime=t;armSeek(t)}
+function seekDelta(d){seekTo((v.currentTime||0)+d)}
+async function reloadAt(t,auto=false){if(!cur)return;if(seekTimer)clearTimeout(seekTimer);setPlayStatus(auto?'Seek stalled — reconnecting…':'Reloading current position…');let play=lastWasPlaying;v.pause();v.removeAttribute('src');v.load();await new Promise(r=>setTimeout(r,80));v.src=media(cur.path,true);v.load();v.addEventListener('loadedmetadata',function once(){v.removeEventListener('loadedmetadata',once);let pos=Math.max(0,Math.min(v.duration-.01,Number(t)||0));v.currentTime=pos;armSeek(pos);if(play)v.play().catch(()=>{})})}
+async function fullscreen(){let p=$('previewPane');try{if(document.fullscreenElement)await document.exitFullscreen();else await p.requestFullscreen()}catch(e){setPlayStatus('Full screen blocked by browser',true)}}
+v.onloadedmetadata=()=>{updateTime();setPlayStatus(`Ready • duration ${tm(v.duration)}`)};v.ontimeupdate=updateTime;v.onseeked=()=>{if(seekTimer)clearTimeout(seekTimer);setPlayStatus(`Position ${tm(v.currentTime)}`)};v.onwaiting=()=>setPlayStatus(`Buffering at ${tm(v.currentTime)}…`);v.onerror=()=>setPlayStatus(`Playback error ${v.error?.code||'?'}. Run Deep check for this file.`,true);v.onplay=()=>{$('play').textContent='⏸ Pause'};v.onpause=()=>{$('play').textContent='▶ Play'};
+$('seekbar').onchange=()=>{if(Number.isFinite(v.duration))seekTo(v.duration*Number($('seekbar').value)/1000)};$('back').onclick=()=>seekDelta(-5);$('fwd').onclick=()=>seekDelta(5);$('play').onclick=()=>v.paused?v.play().catch(()=>{}):v.pause();for(const b of document.querySelectorAll('.speed'))b.onclick=()=>rate(b.dataset.r);$('fullscreen').onclick=fullscreen;$('reloadPos').onclick=()=>reloadAt(v.currentTime||lastSeek,false);$('previewKeep').onchange=()=>cur&&setKeep(cur,$('previewKeep').checked);$('markReview').onclick=markReview;
+async function probeCurrent(deep){if(!cur)return;setPlayStatus(deep?'Running 3-point decode check…':'Running ffprobe…');try{let r=await api('/api/probe',{method:'POST',body:JSON.stringify({path:cur.path,deep})});toast(`Probe ${r.probe.status}`);await refresh()}catch(e){setPlayStatus(e.message,true)}}$('quickProbe').onclick=()=>probeCurrent(false);$('deepProbe').onclick=()=>probeCurrent(true);
+async function probeHour(){let h=$('hour').value;if(!h){alert('Choose one hour first.');return}toast('Checking '+h+'…');let r=await api('/api/probe-scope',{method:'POST',body:JSON.stringify({hour:h})});toast(`Checked ${r.count} video(s)`);await refresh()}
+async function makePlan(hour){let r=await api('/api/cleanup-plan',{method:'POST',body:JSON.stringify({hour:hour||null})});PLAN=r.plan;planHour=hour||null;let names=PLAN.accepted.map(x=>`${x.hour} • ${x.camera} • ${x.name} • ${bytes(x.expected_size)}`);$('mtext').textContent=`KEEP ${PLAN.keep_count} video(s). Delete ${PLAN.count} unselected video(s), about ${bytes(PLAN.bytes)}.`;$('blocked').textContent=PLAN.blocked.length?'Protected: '+PLAN.blocked.map(x=>`${x.hour} (${x.reason})`).join(' • '):'';$('mlist').textContent=names.join('\n')||'No file is eligible for deletion.';$('sure').checked=false;$('go').disabled=true;$('modal').classList.add('open')}
+async function executePlan(){if(!PLAN)return;if(cur&&PLAN.accepted.some(x=>x.path===cur.path)){v.pause();v.removeAttribute('src');v.load();cur=null;hidePreview();await new Promise(r=>setTimeout(r,120))}let r=await api('/api/cleanup',{method:'POST',body:JSON.stringify({plan_id:PLAN.plan_id,hour:planHour})});closeModal();if(r.errors?.length)alert(`Deleted ${r.deleted}; failed ${r.failed}\n`+r.errors.map(e=>e.path+': '+e.error).join('\n'));else toast(`Deleted ${r.deleted} • freed ${bytes(r.bytes_removed)}`);await refresh()}
+function closeModal(){$('modal').classList.remove('open');PLAN=null;planHour=null}$('sure').onchange=e=>$('go').disabled=!e.target.checked;$('go').onclick=executePlan;$('cancel').onclick=closeModal;
+$('probeHour').onclick=probeHour;$('cleanupHour').onclick=()=>{let h=$('hour').value;if(!h){alert('Choose one hour first.');return}makePlan(h)};$('cleanupAll').onclick=()=>makePlan(null);$('sync').onclick=async()=>{await api('/api/sync',{method:'POST',body:'{}'});toast('Storage synced')};$('refresh').onclick=refresh;
+for(const id of ['hour','camera','qc','state'])$(id).onchange=()=>{render();populateFilters()};$('search').oninput=render;
+document.onkeydown=e=>{if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)||!cur)return;if(e.code==='Space'){e.preventDefault();v.paused?v.play().catch(()=>{}):v.pause()}else if(e.key==='ArrowLeft'){e.preventDefault();seekDelta(-5)}else if(e.key==='ArrowRight'){e.preventDefault();seekDelta(5)}else if(['1','2','5'].includes(e.key))rate(e.key);else if(e.key.toLowerCase()==='f')fullscreen()};
+refresh().catch(e=>document.body.textContent='Error: '+e.message);
+</script>
+</body>
+</html>
