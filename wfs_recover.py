@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Entry point for WFS 0.5 Recovery Toolkit.
-
-The recovery implementation is stored in ordered source parts under src/.
-This wrapper also integrates the recovered-video review console.
-"""
+"""Entry point for WFS 0.5 Recovery Toolkit."""
 from pathlib import Path
 import argparse
 
@@ -19,49 +15,43 @@ if _entry in _code:
 
 exec(compile(_code, str(_ROOT / "src" / "wfs_recover_impl.py"), "exec"), globals(), globals())
 
-VERSION = "0.7.1"
+VERSION = "0.8.0"
 _original_build_parser = build_parser
 
 
-def _cmd_review(args):
-    from review_compat import serve
+def _review(args):
+    from review_server_v2 import serve
     serve(
-        root=args.root,
-        bind=args.bind,
-        port=args.port,
-        allow_delete=args.allow_delete,
-        token=args.token,
-        quarantine=Path(args.quarantine_dir) if args.quarantine_dir else None,
+        args.root,
+        args.bind,
+        args.port,
+        args.allow_delete,
+        args.token,
+        Path(args.quarantine_dir) if args.quarantine_dir else None,
+        args.delete_policy,
     )
 
 
 def build_parser():
     ap = _original_build_parser()
-    sub = next(
-        (a for a in ap._actions if isinstance(a, argparse._SubParsersAction)),
-        None,
-    )
+    sub = next((x for x in ap._actions if isinstance(x, argparse._SubParsersAction)), None)
     if sub is None:
         raise RuntimeError("Unable to extend WFS CLI: subparser action not found")
 
-    review = sub.add_parser(
-        "review",
-        help="secure browser review console for recovered videos",
-    )
-    review.add_argument("--root", required=True, help="recovery output directory")
+    review = sub.add_parser("review", help="professional browser review console")
+    review.add_argument("--root", required=True)
     review.add_argument("--bind", default="127.0.0.1")
     review.add_argument("--port", type=int, default=8090)
+    review.add_argument("--allow-delete", action="store_true")
+    review.add_argument("--token")
+    review.add_argument("--quarantine-dir")
     review.add_argument(
-        "--allow-delete",
-        action="store_true",
-        help="enable deletion buttons; disabled by default",
+        "--delete-policy",
+        choices=("selection-only", "anything-except-keep", "discard-only"),
+        default="selection-only",
+        help="selection-only is safest: delete only through the reviewed Delete unselected plan",
     )
-    review.add_argument("--token", help="fixed session token; random by default")
-    review.add_argument(
-        "--quarantine-dir",
-        help="move removed videos here instead of permanent deletion",
-    )
-    review.set_defaults(func=_cmd_review)
+    review.set_defaults(func=_review)
     return ap
 
 
