@@ -1,0 +1,208 @@
+    if rate_error > FAIL_RATE_ERR:
+        fail.append(f"rate_error={rate_error:.3%}")
+    elif rate_error > PASS_RATE_ERR:
+        review.append(f"rate_error={rate_error:.3%}")
+
+    if dur_error > FAIL_DUR_ERR:
+        fail.append(f"duration_error={dur_error:.3%}")
+    elif dur_error > PASS_DUR_ERR:
+        review.append(f"duration_error={dur_error:.3%}")
+
+    if ambiguity > PASS_AMBIGUOUS:
+        review.append(f"ambiguous_steps={ambiguity}")
+    if unresolved:
+        review.append(f"unresolved_steps={unresolved}")
+    if decode_errors:
+        fail.append(f"decode_error_lines={decode_errors}")
+    # Timestamp/muxer warnings are recorded for audit but do not by
+    # themselves imply damaged decoded video.
+    if not deep_verified:
+        review.append("deep_verify_not_run")
+    if scene_jumps:
+        review.append(f"scene_jumps={scene_jumps}")
+
+    if fail:
+        return "FAIL", fail + review, rate_error, dur_error
+    if review:
+        return "REVIEW", review, rate_error, dur_error
+    return "PASS", [], rate_error, dur_error
+
+
+def strategy_specs(name: str):
+    specs = {
+        "conservative": (96, 512),
+        "balanced": (128, 768),
+        "wide": (256, 1536),
+    }
+    if name not in specs:
+        raise ValueError(name)
+    return specs[name]
+
+
+def expected_for_segment(
+    segments: list[dict], i: int, total: int, last_duration: float = 3600.0
+):
+    seg = segments[i]
+    if i + 1 < len(segments):
+        stop = min(segments[i + 1]["frags"])
+        expected = (segments[i + 1]["dt"] - seg["dt"]).total_seconds()
+    else:
+        stop = total
+        expected = float(last_duration)
+    return stop, expected
+
+
+def infer_camera_count(segments: list[dict]) -> int:
+    counts = [len(s["frags"]) for s in segments if 1 <= len(s["frags"]) <= 64]
+    if not counts:
+        return 0
+    freq = {}
+    for c in counts:
+        freq[c] = freq.get(c, 0) + 1
+    return sorted(freq.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+
+
+def normalize_segment_filter(text: Optional[str]) -> Optional[set[str]]:
+    if not text:
+        return None
+    return {x.strip().replace(":", "-") for x in text.split(",") if x.strip()}
+
+
+def estimate_storage(raw: Path, out: Path, factor: float = 1.08):
+    free = shutil.disk_usage(out.parent if not out.exists() else out).free
+    estimated = int(raw.stat().st_size * factor)
+    return free, estimated
+
+
+def mount_fstype(path: Path) -> Optional[str]:
+    p = subprocess.run(
+        ["findmnt", "-no", "FSTYPE", "--target", str(path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    if p.returncode != 0:
+        return None
+    return p.stdout.decode().strip() or None
+
+
+def manifest_write(out: Path, rows: list[dict], meta: dict):
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "manifest.json").write_text(
+        json.dumps({"meta": meta, "streams": rows}, indent=2),
+        encoding="utf-8",
+    )
+
+    fields = sorted({k for row in rows for k in row})
+    with (out / "manifest.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows(rows)
+
+
+def manifest_load(out: Path) -> tuple[dict, list[dict]]:
+    p = out / "manifest.json"
+    if not p.exists():
+        return {}, []
+    try:
+        obj = json.loads(p.read_text(encoding="utf-8"))
+        return obj.get("meta", {}), obj.get("streams", [])
+    except Exception:
+        return {}, []
+
+
+def html_report(out: Path):
+    meta, rows = manifest_load(out)
+    if not rows:
+        raise SystemExit(f"No manifest rows found in {out}")
+
+    fields = [
+        "segment", "slot", "status", "reasons", "strategy",
+        "start_fragment", "fragments", "coverage", "ambiguous_steps",
+        "unresolved_steps", "packets", "fps_assumed", "packet_rate",
+        "expected_duration", "mp4_duration", "duration_error",
+        "decode_error_lines", "decode_warning_lines", "deep_verified",
+        "scene_jumps", "output", "sha256",
+    ]
+
+    def esc(x):
+        return html.escape("" if x is None else str(x))
+
+    counts = {}
+    for r in rows:
+        counts[r.get("status", "?")] = counts.get(r.get("status", "?"), 0) + 1
+
+    summary = " ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+    header = "".join(f"<th>{esc(k)}</th>" for k in fields)
+    body = []
+    for r in rows:
+        cls = esc(r.get("status", "")).lower()
+        cells = "".join(f"<td>{esc(r.get(k, ''))}</td>" for k in fields)
+        body.append(f'<tr class="{cls}">{cells}</tr>')
+
+    doc = f"""<!doctype html>
+<meta charset="utf-8">
+<title>WFS recovery report</title>
+<style>
+body{{font-family:sans-serif;margin:20px}}
+table{{border-collapse:collapse;font-size:12px;width:100%}}
+th,td{{border:1px solid #bbb;padding:4px;vertical-align:top}}
+th{{position:sticky;top:0;background:#eee}}
+.pass{{background:#eaffea}} .review{{background:#fff5cc}} .fail{{background:#ffe2e2}}
+code{{white-space:pre-wrap}}
+</style>
+<h1>WFS recovery report</h1>
+<p><b>Version:</b> {esc(meta.get("tool_version"))}<br>
+<b>Source:</b> {esc(meta.get("source"))}<br>
+<b>Date:</b> {esc(meta.get("date"))}<br>
+<b>Summary:</b> {esc(summary)}</p>
+<p>PASS means the candidate met structural/rate/duration checks. It does <b>not</b>
+prove a physical camera identity. REVIEW/FAIL candidates require operator review.</p>
+<table><thead><tr>{header}</tr></thead><tbody>{''.join(body)}</tbody></table>
+"""
+    (out / "index.html").write_text(doc, encoding="utf-8")
+    print(out / "index.html")
+
+
+def recover_once(
+    fd: int,
+    raw: Path,
+    out: Path,
+    work: Path,
+    segment: dict,
+    stop: int,
+    expected: float,
+    strategy: str,
+    deep_verify: bool,
+    make_thumbs: bool,
+    fps_choices: Iterable[float] = FPS_CHOICES,
+):
+    near, far = strategy_specs(strategy)
+    states = build_chains(fd, segment["frags"], stop, near, far)
+
+    span = max(1, stop - min(segment["frags"]))
+    coverage = sum(len(s.chain) for s in states) / span
+
+    rows = []
+    video_dir = out / "video"
+    thumb_dir = out / "thumbs"
+    video_dir.mkdir(parents=True, exist_ok=True)
+    work.mkdir(parents=True, exist_ok=True)
+
+    for slot, state in enumerate(states, 1):
+        base = f"{segment['label']}_slot{slot}_{strategy}"
+        h265 = work / f"{base}.h265"
+        mp4 = video_dir / f"{base}.mp4"
+
+        try:
+            h265_bytes, packets, type_counts = extract_hevc(fd, state.chain, h265)
+        except Exception as exc:
+            rows.append({
+                "segment": segment["label"], "slot": slot, "status": "FAIL",
+                "reasons": f"extract:{exc}", "strategy": strategy,
+                "start_fragment": state.start, "fragments": len(state.chain),
+                "coverage": round(coverage, 6),
+                "ambiguous_steps": state.ambiguous_steps,
+                "unresolved_steps": state.unresolved_steps,
+            })
+            h265.unlink(missing_ok=True)
+            continue
