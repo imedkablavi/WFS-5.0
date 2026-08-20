@@ -1,0 +1,225 @@
+                    packets += 1
+                p += total
+
+            buffer = buffer[p:]
+
+    return written, packets, type_counts
+
+
+def choose_fps(
+    packets: int, expected: float, choices: Iterable[float] = FPS_CHOICES
+) -> tuple[float, float, float]:
+    observed = packets / expected if expected else 0.0
+    clean = tuple(float(x) for x in choices if float(x) > 0)
+    if not clean:
+        clean = FPS_CHOICES
+    fps = min(clean, key=lambda f: abs(observed - f))
+    err = abs(observed - fps) / fps if fps else 1.0
+    return fps, observed, err
+
+
+def parse_fps_choices(text: str) -> tuple[float, ...]:
+    vals = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            val = float(part)
+        except ValueError as exc:
+            raise SystemExit(f"Invalid --fps-choices value: {part}") from exc
+        if val <= 0 or val > 240:
+            raise SystemExit(f"Invalid FPS candidate: {val}")
+        vals.append(val)
+    if not vals:
+        raise SystemExit("--fps-choices must contain at least one positive value")
+    return tuple(sorted(set(vals)))
+
+
+def run_command(cmd: list[str], timeout: int = 3600):
+    """Run an external command without allowing a timeout to abort the whole job."""
+    try:
+        return subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        out = exc.stdout or b""
+        err = (exc.stderr or b"") + f"\nTIMEOUT after {timeout}s\n".encode()
+        return subprocess.CompletedProcess(cmd, 124, out, err)
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(cmd, 127, b"", str(exc).encode())
+
+
+def remux_hevc(h265: Path, mp4: Path, fps: float) -> tuple[bool, str]:
+    p = run_command([
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "warning",
+        "-r", str(int(round(fps))),
+        "-f", "hevc", "-i", str(h265),
+        "-an", "-c:v", "copy", "-tag:v", "hvc1",
+        "-movflags", "+faststart",
+        str(mp4),
+    ])
+    return p.returncode == 0 and mp4.exists(), p.stderr.decode(errors="replace")
+
+
+def probe_mp4(path: Path) -> dict:
+    p = run_command([
+        "ffprobe", "-v", "error",
+        "-select_streams", "v:0",
+        "-count_frames", "-count_packets",
+        "-show_entries",
+        "stream=codec_name,width,height,r_frame_rate,avg_frame_rate,nb_read_frames,nb_read_packets:"
+        "format=duration,size",
+        "-of", "json",
+        str(path),
+    ], timeout=3600)
+    if p.returncode != 0:
+        return {"error": p.stderr.decode(errors="replace")}
+    try:
+        return json.loads(p.stdout.decode())
+    except Exception:
+        return {"error": "invalid ffprobe json"}
+
+
+def full_decode_check(path: Path, timeout: int = 7200) -> tuple[int, int, str]:
+    """Full FFmpeg decode.
+
+    FFmpeg can print timestamp/muxer warnings even when the decoder itself is
+    clean. Those warnings are tracked separately instead of being counted as
+    video corruption.
+    """
+    p = run_command([
+        "ffmpeg", "-hide_banner", "-loglevel", "error",
+        "-i", str(path),
+        "-map", "0:v:0",
+        "-an", "-sn", "-dn",
+        "-fps_mode", "passthrough",
+        "-f", "null", "-",
+    ], timeout=timeout)
+    text = p.stderr.decode(errors="replace")
+    lines = [x.strip() for x in text.splitlines() if x.strip()]
+
+    warning_markers = (
+        "non monotonically increasing dts",
+        "non-monotonically increasing dts",
+        "application provided invalid",
+        "deprecated pixel format",
+    )
+    warnings = [
+        x for x in lines
+        if any(m in x.lower() for m in warning_markers)
+    ]
+    errors = [x for x in lines if x not in warnings]
+
+    if p.returncode not in (0,):
+        errors.append(f"ffmpeg_returncode={p.returncode}")
+    return len(errors), len(warnings), text
+
+
+def probe_duration(path: Path) -> float:
+    data = probe_mp4(path)
+    try:
+        return float(data["format"]["duration"])
+    except Exception:
+        return 0.0
+
+
+def frame_gray(path: Path, when: float) -> Optional[bytes]:
+    p = run_command([
+        "ffmpeg", "-hide_banner", "-loglevel", "error",
+        "-ss", f"{when:.3f}", "-i", str(path),
+        "-frames:v", "1",
+        "-vf", "scale=9:8,format=gray",
+        "-f", "rawvideo", "pipe:1",
+    ], timeout=60)
+    if p.returncode != 0 or len(p.stdout) < 72:
+        return None
+    return p.stdout[:72]
+
+
+def dhash_pixels(pix: bytes) -> int:
+    value = 0
+    for y in range(8):
+        for x in range(8):
+            value = (value << 1) | int(
+                pix[y * 9 + x] > pix[y * 9 + x + 1]
+            )
+    return value
+
+
+def hamming(a: int, b: int) -> int:
+    return (a ^ b).bit_count()
+
+
+def sample_scene_hashes(path: Path, duration: float, every: int = 300):
+    """
+    Sample every five minutes by default. Returns hashes and adjacent jump count.
+    This is a heuristic: lighting changes/motion can trigger false positives.
+    """
+    hashes = []
+    if duration <= 1:
+        return hashes, 0
+
+    start = min(60.0, max(1.0, duration * 0.02))
+    t = start
+    while t < max(start + 1, duration - 30):
+        pix = frame_gray(path, t)
+        if pix is not None:
+            hashes.append((t, dhash_pixels(pix)))
+        t += every
+
+    jumps = 0
+    for (_, a), (_, b) in zip(hashes, hashes[1:]):
+        if hamming(a, b) >= SCENE_JUMP_REVIEW:
+            jumps += 1
+
+    return hashes, jumps
+
+
+def save_thumbs(path: Path, outdir: Path, base: str, duration: float):
+    outdir.mkdir(parents=True, exist_ok=True)
+    for minute in (5, 20, 40, 55):
+        sec = minute * 60
+        if sec >= duration:
+            continue
+        dst = outdir / f"{base}_{minute:02d}min.jpg"
+        run_command([
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-ss", f"00:{minute:02d}:00",
+            "-i", str(path),
+            "-frames:v", "1",
+            "-vf", "scale=640:-2",
+            "-q:v", "3",
+            str(dst),
+        ], timeout=60)
+
+
+def classify_qc(
+    expected: float,
+    coverage: float,
+    packets: int,
+    fps: float,
+    duration: float,
+    ambiguity: int,
+    unresolved: int,
+    decode_errors: int,
+    decode_warnings: int,
+    deep_verified: bool,
+    scene_jumps: int,
+) -> tuple[str, list[str], float, float]:
+    rate = packets / expected if expected else 0.0
+    rate_error = abs(rate - fps) / fps if fps else 1.0
+    dur_error = abs(duration - expected) / expected if expected else 1.0
+
+    fail = []
+    review = []
+
+    # Coverage is a segment-level physical allocation metric, not a proof
+    # that every individual camera stream is incomplete. A missing fragment
+    # can belong to only one camera, so low segment coverage forces REVIEW
+    # but does not by itself FAIL every stream.
+    if coverage < PASS_COVERAGE:
+        review.append(f"segment_coverage={coverage:.4f}")
