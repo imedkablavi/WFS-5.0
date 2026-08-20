@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.log
+work/
+recovered/
+scan-output/
+_attempts/
+*.raw
+*.img
+*.dd
+*.E01
