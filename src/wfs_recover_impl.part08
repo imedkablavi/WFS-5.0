@@ -1,0 +1,27 @@
+    rec.add_argument("--thumbs", action="store_true",
+                     help="create 5/20/40/55 minute JPEGs")
+    rec.add_argument("--resume", action="store_true")
+    rec.add_argument("--keep-attempts", action="store_true")
+    rec.add_argument("--ignore-space", action="store_true")
+    rec.add_argument("--allow-device", action="store_true")
+    rec.set_defaults(func=cmd_recover)
+
+    report = sub.add_parser("report", help="rebuild HTML report")
+    report.add_argument("--out", required=True)
+    report.set_defaults(func=cmd_report)
+
+    hp = sub.add_parser("hash", help="SHA-256 a file")
+    hp.add_argument("path")
+    hp.set_defaults(func=cmd_hash)
+
+    return ap
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
