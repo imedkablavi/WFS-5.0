@@ -1,0 +1,170 @@
+            final_thumbs = out / "thumbs"
+            final_logs = out / "logs"
+            final_video.mkdir(exist_ok=True)
+            final_thumbs.mkdir(exist_ok=True)
+            final_logs.mkdir(exist_ok=True)
+
+            rows = [x for x in rows if x.get("segment") != segment["label"]]
+            preserve_best = args.keep_attempts
+
+            for r in best_rows:
+                reasons = r.get("reasons")
+                if isinstance(reasons, str):
+                    reasons = [reasons]
+                elif not isinstance(reasons, list):
+                    reasons = []
+                r["reasons"] = reasons
+
+                src = Path(r["output"]) if r.get("output") else None
+                if src and src.exists():
+                    status = r.get("status", "REVIEW")
+                    slot = int(r.get("slot", 0))
+                    suffix = "" if status == "PASS" else f"_{status}"
+                    dst = (
+                        final_video
+                        / f"{args.date}_{segment['label']}_candidate{slot}{suffix}.mp4"
+                    )
+
+                    if is_fat32 and src.stat().st_size > FAT32_LIMIT:
+                        r["reasons"].append("fat32_file_limit_exceeded_before_copy")
+                        r["status"] = "FAIL"
+                        r["output"] = str(src)
+                        preserve_best = True
+                    else:
+                        try:
+                            shutil.copy2(src, dst)
+                            r["output"] = str(dst)
+                            r["sha256"] = sha256_file(dst)
+                        except OSError as exc:
+                            r["reasons"].append(f"final_copy_failed:{exc}")
+                            r["status"] = "FAIL"
+                            r["output"] = str(src)
+                            preserve_best = True
+
+                if args.thumbs:
+                    pattern = (
+                        f"{segment['label']}_slot{r.get('slot')}_"
+                        f"{best_strategy}_*.jpg"
+                    )
+                    for jpg in (best_dir / "thumbs").glob(pattern):
+                        try:
+                            shutil.copy2(jpg, final_thumbs / jpg.name)
+                        except OSError:
+                            pass
+
+                # Preserve decode logs in the final report directory.
+                log_pattern = (
+                    f"{segment['label']}_slot{r.get('slot')}_"
+                    f"{best_strategy}_decode_errors.txt"
+                )
+                for log in (best_dir / "logs").glob(log_pattern):
+                    try:
+                        shutil.copy2(log, final_logs / log.name)
+                    except OSError:
+                        pass
+
+                rows.append(r)
+
+            meta = {
+                "tool_version": VERSION,
+                "source": str(raw),
+                "source_size": info["size"],
+                "source_sha256": source_sha256,
+                "date": args.date,
+                "fragment_size": FRAG,
+                "camera_count": camera_count,
+                "fps_choices": list(fps_choices),
+                "coverage_semantics": (
+                    "coverage is segment-level physical fragment allocation; "
+                    "individual stream completeness is judged mainly by packet rate, "
+                    "duration, ambiguity, decode, and scene checks"
+                ),
+                "camera_identity_policy": (
+                    "candidateN is a reconstruction slot, NOT a physical camera ID. "
+                    "Assign physical camera names only after manual/anchored validation."
+                ),
+                "thresholds": {
+                    "pass_coverage": PASS_COVERAGE,
+                    "review_coverage": REVIEW_COVERAGE,
+                    "pass_rate_error": PASS_RATE_ERR,
+                    "fail_rate_error": FAIL_RATE_ERR,
+                    "pass_duration_error": PASS_DUR_ERR,
+                    "fail_duration_error": FAIL_DUR_ERR,
+                    "scene_jump_review": SCENE_JUMP_REVIEW,
+                },
+                "deep_verify_required_for_pass": True,
+                "updated_utc": datetime.now(timezone.utc).isoformat(),
+            }
+            manifest_write(out, rows, meta)
+            html_report(out)
+
+            if not preserve_best:
+                shutil.rmtree(best_dir, ignore_errors=True)
+
+            if not args.keep_attempts:
+                # Clean empty/stale non-best attempt directories.
+                for d in all_attempt_dirs:
+                    if d != best_dir:
+                        shutil.rmtree(d, ignore_errors=True)
+
+    finally:
+        os.close(fd)
+
+    print("\nDONE")
+    print(out / "manifest.json")
+    print(out / "index.html")
+
+def cmd_report(args):
+    html_report(Path(args.out))
+
+
+def cmd_hash(args):
+    p = Path(args.path)
+    print(sha256_file(p), p)
+
+
+def build_parser():
+    ap = argparse.ArgumentParser(
+        description="Conservative WFS 0.5 DVR/NVR recovery toolkit"
+    )
+    ap.add_argument("--version", action="version", version=VERSION)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    scan = sub.add_parser("scan", help="scan recording starts")
+    scan.add_argument("--raw", required=True)
+    scan.add_argument("--date", required=True)
+    scan.add_argument("--out")
+    scan.add_argument("--allow-device", action="store_true")
+    scan.set_defaults(func=cmd_scan)
+
+    rec = sub.add_parser("recover", help="recover candidate camera streams per segment")
+    rec.add_argument("--raw", required=True)
+    rec.add_argument("--date", required=True)
+    rec.add_argument("--out", required=True)
+    rec.add_argument("--work", required=True)
+    rec.add_argument("--segments", help="comma separated, e.g. 09-00,10-00,11-00")
+    rec.add_argument(
+        "--cameras", default="auto",
+        help="expected recording starts/cameras per boundary, or 'auto' (default)"
+    )
+    rec.add_argument(
+        "--last-duration", type=float, default=3600.0,
+        help="expected duration in seconds for the last boundary in the source slice"
+    )
+    rec.add_argument(
+        "--max-segment-seconds", type=float, default=21600.0,
+        help="refuse automatic recovery for timeline gaps larger than this"
+    )
+    rec.add_argument(
+        "--hash-source", action="store_true",
+        help="SHA-256 the complete source before recovery (can take a long time)"
+    )
+    rec.add_argument(
+        "--fps-choices", default="15,25",
+        help="comma-separated nominal packet/frame-rate candidates (default: 15,25)"
+    )
+    rec.add_argument("--strategy", choices=("conservative", "balanced", "wide"), default="balanced")
+    rec.add_argument("--auto-retry", action="store_true",
+                     help="retry REVIEW/FAIL hours with multiple search radii")
+    rec.add_argument("--deep-verify", action="store_true",
+                     help="full ffmpeg decode check (CPU intensive)")
