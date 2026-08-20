@@ -1,0 +1,191 @@
+        fps, packet_rate, rate_err_pre = choose_fps(packets, expected, fps_choices)
+        ok, remux_log = remux_hevc(h265, mp4, fps)
+        if not ok:
+            rows.append({
+                "segment": segment["label"], "slot": slot, "status": "FAIL",
+                "reasons": "remux_failed", "strategy": strategy,
+                "start_fragment": state.start, "fragments": len(state.chain),
+                "coverage": round(coverage, 6),
+                "ambiguous_steps": state.ambiguous_steps,
+                "unresolved_steps": state.unresolved_steps,
+                "packets": packets, "fps_assumed": fps,
+                "packet_rate": round(packet_rate, 6),
+            })
+            h265.unlink(missing_ok=True)
+            mp4.unlink(missing_ok=True)
+            continue
+
+        duration = probe_duration(mp4)
+        decode_errors = 0
+        decode_warnings = 0
+        decode_text = ""
+        if deep_verify:
+            decode_errors, decode_warnings, decode_text = full_decode_check(mp4)
+
+        scene_hashes, scene_jumps = sample_scene_hashes(mp4, duration)
+        hashes_text = [f"{t:.1f}:{v:016x}" for t, v in scene_hashes]
+
+        status, reasons, rate_error, dur_error = classify_qc(
+            expected, coverage, packets, fps, duration,
+            state.ambiguous_steps, state.unresolved_steps,
+            decode_errors, decode_warnings, deep_verify, scene_jumps,
+        )
+
+        final_mp4 = mp4
+        if status != "PASS":
+            final_mp4 = mp4.with_name(mp4.stem + f"_{status}.mp4")
+            mp4.rename(final_mp4)
+
+        if make_thumbs:
+            save_thumbs(final_mp4, thumb_dir, base, duration)
+
+        sha = sha256_file(final_mp4)
+        rows.append(asdict(StreamQC(
+            segment=segment["label"],
+            slot=slot,
+            status=status,
+            reasons=reasons,
+            start_fragment=state.start,
+            fragments=len(state.chain),
+            coverage=round(coverage, 6),
+            ambiguous_steps=state.ambiguous_steps,
+            unresolved_steps=state.unresolved_steps,
+            packets=packets,
+            fps_assumed=fps,
+            packet_rate=round(packet_rate, 6),
+            rate_error=round(rate_error, 6),
+            expected_duration=expected,
+            mp4_duration=round(duration, 6),
+            duration_error=round(dur_error, 6),
+            hevc_bytes=h265_bytes,
+            decode_error_lines=decode_errors,
+            decode_warning_lines=decode_warnings,
+            deep_verified=deep_verify,
+            scene_jumps=scene_jumps,
+            scene_hashes=hashes_text,
+            output=str(final_mp4),
+            sha256=sha,
+            strategy=strategy,
+        )))
+        rows[-1]["record_type_counts"] = {
+            f"0x{k:02X}": v for k, v in sorted(type_counts.items())
+        }
+
+        if decode_text:
+            (out / "logs").mkdir(exist_ok=True)
+            (out / "logs" / f"{base}_decode_errors.txt").write_text(
+                decode_text, encoding="utf-8", errors="replace"
+            )
+
+        h265.unlink(missing_ok=True)
+
+    return rows
+
+
+def score_attempt(rows: list[dict]) -> float:
+    """
+    Lower is better. This does not establish camera identity; it only selects
+    the technically least-problematic reconstruction strategy for an hour.
+    """
+    if not rows:
+        return float("inf")
+
+    penalty = 0.0
+    for r in rows:
+        status = r.get("status")
+        penalty += {"PASS": 0, "REVIEW": 1000, "FAIL": 100000}.get(status, 100000)
+        penalty += 10000 * max(0.0, PASS_COVERAGE - float(r.get("coverage", 0)))
+        penalty += 1000 * float(r.get("rate_error", 1))
+        penalty += 1000 * float(r.get("duration_error", 1))
+        penalty += 25 * int(r.get("ambiguous_steps", 0))
+        penalty += 50 * int(r.get("unresolved_steps", 0))
+        penalty += 1000 * int(r.get("decode_error_lines", 0))
+        penalty += 5 * int(r.get("decode_warning_lines", 0))
+        penalty += 10 * int(r.get("scene_jumps", 0))
+    return penalty
+
+
+def cmd_scan(args):
+    raw = Path(args.raw)
+    info = source_guard(raw, args.allow_device)
+    date = datetime.fromisoformat(args.date)
+    total = info["size"] // FRAG
+
+    fd = os.open(raw, os.O_RDONLY)
+    try:
+        segments = scan_starts(fd, total, date)
+    finally:
+        os.close(fd)
+
+    print(f"WFS recovery tool {VERSION}")
+    print(f"Source: {raw}")
+    print(f"Size: {info['size']} bytes")
+    print(f"Fragments: {total}")
+    inferred = infer_camera_count(segments)
+    if inferred:
+        print(f"Inferred camera/start count: {inferred}")
+    for s in segments:
+        print(f"{s['label']} {s['frags']} count={len(s['frags'])}")
+
+    if args.out:
+        out = Path(args.out)
+        out.mkdir(parents=True, exist_ok=True)
+        obj = {
+            "tool_version": VERSION,
+            "source": str(raw),
+            "size": info["size"],
+            "date": args.date,
+            "fragments": total,
+            "inferred_camera_count": infer_camera_count(segments),
+            "segments": [
+                {"label": s["label"], "frags": s["frags"], "dt": s["dt"].isoformat()}
+                for s in segments
+            ],
+        }
+        (out / "scan.json").write_text(json.dumps(obj, indent=2), encoding="utf-8")
+        print(out / "scan.json")
+
+
+def cmd_recover(args):
+    raw = Path(args.raw)
+    out = Path(args.out)
+    work = Path(args.work)
+    info = source_guard(raw, args.allow_device)
+    date = datetime.fromisoformat(args.date)
+    fps_choices = parse_fps_choices(args.fps_choices)
+
+    for exe in ("ffmpeg", "ffprobe"):
+        if shutil.which(exe) is None:
+            raise SystemExit(f"Missing required executable: {exe}")
+
+    out.mkdir(parents=True, exist_ok=True)
+    work.mkdir(parents=True, exist_ok=True)
+
+    fstype = mount_fstype(out)
+    is_fat32 = bool(fstype and fstype.lower() in ("vfat", "fat", "fat32"))
+    print(f"Output filesystem: {fstype or 'unknown'}")
+    if is_fat32:
+        print("FAT32/vfat detected: individual output files must remain below ~4 GiB.")
+
+    total = info["size"] // FRAG
+    if total <= 0:
+        raise SystemExit("Source is smaller than one configured WFS fragment.")
+
+    fd = os.open(raw, os.O_RDONLY)
+    requested = normalize_segment_filter(args.segments)
+    meta_old, old_rows = manifest_load(out)
+    rows = list(old_rows) if args.resume else []
+
+    source_sha256 = meta_old.get("source_sha256") if args.resume else None
+    if args.hash_source and not source_sha256:
+        print("Hashing source with SHA-256 (this can take a long time)...")
+        source_sha256 = sha256_file(raw)
+        print("Source SHA-256:", source_sha256)
+
+    try:
+        # Scan once and reuse the complete timeline for boundaries/durations.
+        all_segments = scan_starts(fd, total, date)
+        if not all_segments:
+            raise SystemExit("No recording starts found for the requested date.")
+
+        if args.cameras == "auto":
