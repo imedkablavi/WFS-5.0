@@ -19,12 +19,12 @@ if _entry in _code:
 
 exec(compile(_code, str(_ROOT / "src" / "wfs_recover_impl.py"), "exec"), globals(), globals())
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 _original_build_parser = build_parser
 
 
 def _cmd_review(args):
-    from review_server import serve
+    from review_compat import serve
     serve(
         root=args.root,
         bind=args.bind,
